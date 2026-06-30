@@ -536,8 +536,37 @@ function SummaryModal({ region, stats, storeCount, completedStoreCount, onClose 
 }
 
 function Contacts({ items }: { items: SurveyItem[] }) {
-  const contacts = Array.from(new Map(items.map((item) => [item.companyName || "업체명 없음", item])).values());
-  return <section className="panel"><h2>업체 연락처</h2>{contacts.map((item) => <div className="contact" key={item.companyName + item.companyTel}><strong>{item.companyName || "업체명 없음"}</strong><span>담당자: {item.companyManager || "-"}</span><a href={`tel:${item.companyTel.replace(/[^\d+]/g, "")}`}><Phone size={15} />{item.companyTel || "연락처 없음"}</a><span>품목: {items.filter((candidate) => candidate.companyName === item.companyName).length}개</span></div>)}</section>;
+  const contacts = Array.from(new Map(items.map((item) => [`${item.companyName}|${item.companyManager}|${item.companyTel}`, item])).values());
+  return (
+    <section className="panel">
+      <h2>업체 연락처</h2>
+      {contacts.length === 0 && <p className="warn">확인 필요: 연락처 정보가 없습니다.</p>}
+      {contacts.map((item) => {
+        const count = items.filter((candidate) => candidate.companyName === item.companyName && candidate.companyManager === item.companyManager && candidate.companyTel === item.companyTel).length;
+        return (
+          <div className="contact" key={`${item.companyName}-${item.companyManager}-${item.companyTel}`}>
+            <strong>{item.companyName || "업체명 확인 필요"}</strong>
+            <span>담당자: {item.companyManager || "확인 필요"}</span>
+            {item.companyTel ? <a href={`tel:${item.companyTel.replace(/[^\d+]/g, "")}`}><Phone size={15} />{item.companyTel}</a> : <span className="warn">전화: 확인 필요</span>}
+            <span>해당 품목: {count.toLocaleString()}개</span>
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
+function ItemContact({ item }: { item: SurveyItem }) {
+  const hasAnyContact = Boolean(item.companyName || item.companyManager || item.companyTel);
+  return (
+    <section className={`item-contact ${hasAnyContact && item.companyTel ? "" : "needs-check"}`}>
+      <div>
+        <strong>{item.companyName || "업체명 확인 필요"}</strong>
+        <span>담당자: {item.companyManager || "확인 필요"}</span>
+      </div>
+      {item.companyTel ? <a href={`tel:${item.companyTel.replace(/[^\d+]/g, "")}`}><Phone size={15} />{item.companyTel}</a> : <span className="warn">연락처 확인 필요</span>}
+    </section>
+  );
 }
 
 function PhotoInput({ id, label, onFile }: { id?: string; label: string; onFile: (file: File) => void | Promise<void> }) {
@@ -595,6 +624,7 @@ function ItemEditor({ item, photos, onPhoto, onDeletePhoto, onSave }: { item: Su
     }
   };
   return <main className="page item-page"><section className="item-hero compact-hero"><div><h1>{draft.itemNo} {draft.productName}</h1><Badge text={draft.status} /></div></section>
+    <ItemContact item={draft} />
     <section className="panel"><h2>① 사진자료</h2><p>업체사진: {photos.some((photo) => photo.type === "STORE_FRONT") ? "촬영완료" : "미촬영"} (ZIP 내보내기 시 품목별 .1 파일로 복사)</p>{photoMessage && <p className="ok upload-message">{photoMessage}</p>}<PhotoSlot id="photo-product-display" label="제품진열사진" photo={itemPhotos.display} onFile={(file) => upload("PRODUCT_DISPLAY", file, "제품진열사진")} onDelete={onDeletePhoto} /><PhotoSlot id="photo-product-info" label="제품정보/후면/바코드사진" photo={itemPhotos.info} onFile={(file) => upload("PRODUCT_INFO_BARCODE", file, "제품정보/후면/바코드사진")} onDelete={onDeletePhoto} /><PhotoSlot id="photo-pos-receipt" label="POS/영수증사진" photo={itemPhotos.pos} onFile={(file) => upload("POS_RECEIPT", file, "POS/영수증사진")} onDelete={onDeletePhoto} /><button className="row-button" onClick={nextBlank}>다음 빈칸으로 이동</button>{missing.length > 0 && <p className="warn">사진누락: {missing.join(", ")}</p>}</section>
     <details className="panel" open><summary>② 업체 제시정보</summary><Info item={draft} /></details>
     <section className="panel"><h2>③ 실물 확인</h2><Choice label="정상진열" value={draft.normalDisplay} values={["O", "X"]} onChange={(value) => update({ normalDisplay: value as SurveyItem["normalDisplay"] })} /><Choice label="규격일치" value={draft.specMatch} values={["O", "X", "-"]} onChange={(value) => update({ specMatch: value as SurveyItem["specMatch"] })} /><Choice label="바코드일치" value={draft.barcodeMatch} values={["O", "X", "-"]} onChange={(value) => update({ barcodeMatch: value as SurveyItem["barcodeMatch"] })} /></section>
