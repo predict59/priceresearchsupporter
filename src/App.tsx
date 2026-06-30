@@ -1,5 +1,6 @@
 import { Camera, CheckCircle2, ChevronDown, ChevronUp, Download, Info as InfoIcon, MapPin, Menu, MoreVertical, Phone, SlidersHorizontal, Search, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import type { DragEvent } from "react";
 import { clearAllData, deletePhoto, getItems, getPhotosByRegion, getPhotosByStore, getRegions, getSettings, getStores, importRegionData, now, putItem, putPhoto, putStore, saveParsedData, saveSettings, today, uid } from "./db";
 import { parseContactRows, parseSurveyWorkbook, mergeContacts, rebuildStoresAndRegions } from "./excel";
 import { dataUrlToBlob, exportBackup, exportRegionExcel, exportRegionZip } from "./exporters";
@@ -41,6 +42,7 @@ function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [storeSort, setStoreSort] = useState<StoreSort>("주소순");
   const [orderEditing, setOrderEditing] = useState(false);
+  const [dragStoreId, setDragStoreId] = useState("");
   const [workspaceToolsOpen, setWorkspaceToolsOpen] = useState(false);
   const [itemToolsOpen, setItemToolsOpen] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
@@ -98,6 +100,13 @@ function App() {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [view, currentRegion, selectedStoreId, selectedItemId]);
 
+  useEffect(() => {
+    if (view !== "workspace") {
+      setOrderEditing(false);
+      setDragStoreId("");
+    }
+  }, [view]);
+
   async function updateSettings(patch: Partial<AppSettings>) {
     const next = { ...settings, ...patch };
     setSettingsState(next);
@@ -152,6 +161,8 @@ function App() {
     setSelectedItemId("");
     setQuery("");
     setFilter("미완료");
+    setOrderEditing(false);
+    setDragStoreId("");
     await refresh(region);
     setView("workspace");
   }
@@ -176,6 +187,19 @@ function App() {
     [ordered[index], ordered[nextIndex]] = [ordered[nextIndex], ordered[index]];
     await Promise.all(ordered.map((candidate, orderIndex) => putStore({ ...candidate, visitOrder: orderIndex + 1, updatedAt: now() })));
     await refresh(store.region);
+  }
+
+  async function reorderVisitOrder(draggedId: string, targetId: string) {
+    if (!draggedId || draggedId === targetId) return;
+    const ordered = [...regionStores].sort(storeVisitCompare);
+    const from = ordered.findIndex((candidate) => candidate.id === draggedId);
+    const to = ordered.findIndex((candidate) => candidate.id === targetId);
+    if (from < 0 || to < 0) return;
+    const [moved] = ordered.splice(from, 1);
+    ordered.splice(to, 0, moved);
+    await Promise.all(ordered.map((candidate, orderIndex) => putStore({ ...candidate, visitOrder: orderIndex + 1, updatedAt: now() })));
+    setDragStoreId("");
+    await refresh(currentRegion);
   }
 
   async function saveStorePhoto(file: File) {
@@ -285,7 +309,7 @@ function App() {
   };
   const screenTitle =
     view === "regions" ? "지역리스트"
-    : view === "workspace" ? "업체 리스트"
+    : view === "workspace" ? "업체리스트"
     : view === "store" ? "업체정보"
     : view === "items" ? "물품리스트"
     : view === "item" ? "가격정보"
@@ -402,11 +426,16 @@ function App() {
                   items={ownItems}
                   focused={selectedStoreId === store.id}
                   orderEditing={orderEditing}
+                  dragging={dragStoreId === store.id}
                   onOpen={() => openStore(store)}
                   onContacts={() => setContactStoreId(store.id)}
                   onOrderChange={(value) => saveVisitOrder(store, value)}
                   onMoveUp={() => moveVisitOrder(store, -1)}
                   onMoveDown={() => moveVisitOrder(store, 1)}
+                  onDragStart={() => setDragStoreId(store.id)}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={() => reorderVisitOrder(dragStoreId, store.id)}
+                  onDragEnd={() => setDragStoreId("")}
                 />
               );
             })}
@@ -578,29 +607,40 @@ function StoreCard({
   items,
   focused,
   orderEditing,
+  dragging,
   onOpen,
   onContacts,
   onOrderChange,
   onMoveUp,
   onMoveDown,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
 }: {
   store: SurveyStore;
   stats: RegionStats;
   items: SurveyItem[];
   focused: boolean;
   orderEditing: boolean;
+  dragging: boolean;
   onOpen: () => void;
   onContacts: () => void;
   onOrderChange: (value: string) => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
+  onDragStart: () => void;
+  onDragOver: (event: DragEvent<HTMLElement>) => void;
+  onDrop: () => void;
+  onDragEnd: () => void;
 }) {
   const completed = items.filter((item) => item.status === "완료");
   const latestSurveyDate = completed.map((item) => item.surveyDate).filter(Boolean).sort().at(-1) ?? "-";
   const percent = stats.total ? Math.round((stats.completed / stats.total) * 100) : 0;
   if (orderEditing) {
     return (
-      <article className={`visit-order-row ${focused ? "focused" : ""}`}>
+      <article className={`visit-order-row ${focused ? "focused" : ""} ${dragging ? "dragging" : ""}`} draggable onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}>
+        <span className="drag-handle" aria-hidden="true">☰</span>
         <input aria-label={`${store.storeName} 방문순서`} inputMode="numeric" value={store.visitOrder ?? ""} placeholder="-" onChange={(event) => onOrderChange(event.target.value)} />
         <div className="visit-order-name">
           <strong>{store.storeName}</strong>
