@@ -777,7 +777,7 @@ function Choice({ label, value, values, disabled, onChange }: { label: string; v
 }
 
 function Money({ label, value, disabled, onChange }: { label: string; value: number | null; disabled?: boolean; onChange: (value: string) => void }) {
-  return <label>{label}<input inputMode="numeric" pattern="[0-9]*" disabled={disabled} value={typeof value === "number" && Number.isFinite(value) ? value : ""} onChange={(event) => onChange(event.target.value.replace(/\D/g, ""))} placeholder="원" /></label>;
+  return <label>{label}<input inputMode="numeric" enterKeyHint="done" pattern="[0-9]*" disabled={disabled} value={typeof value === "number" && Number.isFinite(value) ? value : ""} onChange={(event) => onChange(event.target.value.replace(/\D/g, ""))} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} placeholder="원" /></label>;
 }
 
 function Validation({ title, items, open }: { title: string; items: SurveyItem[]; open: (id: string) => void }) {
