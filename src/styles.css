@@ -265,6 +265,26 @@ textarea { min-height: 110px; resize: vertical; }
 .summary-panel.inner {
   margin-bottom: 12px;
 }
+.region-summary {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 14px;
+}
+.region-summary > div:not(.stats-progress) {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+  color: #52616b;
+  font-size: 13px;
+  font-weight: 800;
+}
+.region-summary strong {
+  color: #17202a;
+}
+.region-summary em {
+  font-style: normal;
+}
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -728,6 +748,8 @@ textarea { min-height: 110px; resize: vertical; }
   .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .sort-control { grid-template-columns: 1fr; }
   .region-actions { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .region-summary > div:not(.stats-progress) { grid-template-columns: auto 1fr; }
+  .region-summary em { grid-column: 2; }
   .page-head { align-items: stretch; flex-direction: column; }
   .bottom-bar button { flex: 1 1 120px; }
   .card-actions { grid-template-columns: 1fr; }

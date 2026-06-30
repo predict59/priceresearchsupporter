@@ -157,6 +157,13 @@ function App() {
     await refresh(selectedStore.region);
   }
 
+  async function removeStorePhoto() {
+    if (!selectedStore?.frontPhotoId) return;
+    await deletePhoto(selectedStore.frontPhotoId);
+    await putStore({ ...selectedStore, frontPhotoId: undefined, updatedAt: now() });
+    await refresh(selectedStore.region);
+  }
+
   async function saveItemPhoto(item: SurveyItem, type: PhotoType, file: File) {
     const oldPhotos = await getPhotosByStore(item.storeId);
     await Promise.all(oldPhotos.filter((photo) => photo.itemId === item.id && photo.type === type).map((photo) => deletePhoto(photo.id)));
@@ -300,7 +307,7 @@ function App() {
                   <h2>{region.name}</h2>
                   <p className="area-summary">{region.areaSummary || region.city || "-"}</p>
                   <p className="muted">담당부서: {region.department || "-"} · 지역: {region.name}</p>
-                  <Stats stats={summary.total ? summary : emptyStats} totalLabel="업체 전체" />
+                  <RegionSummary stats={summary.total ? summary : emptyStats} itemStats={summarize(items.filter((item) => item.region === region.name), region.name === currentRegion ? photos : [])} />
                   <div className="region-actions">
                     <button className="primary" onClick={() => chooseRegion(region.name)}>작업</button>
                     <button title="엑셀 내보내기" onClick={() => doExportExcel(region.name)}><Download size={16} />엑셀</button>
@@ -317,7 +324,7 @@ function App() {
       {view === "workspace" && currentRegion && (
         <main className="page">
           <div className="workspace-title">
-            <h1>{currentRegion} 리스트</h1>
+            <h1>{currentRegion} 업체 리스트</h1>
             <button className="tool-toggle icon-button" onClick={() => setSummaryOpen(true)} aria-label="현황 보기"><InfoIcon size={18} /></button>
           </div>
           <div className="sticky-search workspace-search">
@@ -358,13 +365,17 @@ function App() {
           <section className="panel">
             <h1>{selectedStore.storeName}</h1>
             <p>{selectedStore.storeAddress}</p>
-            <label>방문 조사일<input type="date" value={selectedStore.surveyDate} onChange={async (event) => { await putStore({ ...selectedStore, surveyDate: event.target.value, updatedAt: now() }); await refresh(selectedStore.region); }} /></label>
-            <p>조사 품목: {storeItems.length.toLocaleString()}개</p>
-            <PhotoInput label={selectedStore.frontPhotoId ? "업체 전경사진 교체" : "업체 전경사진 촬영/첨부"} onFile={saveStorePhoto} />
+            <h2>업체 전경사진</h2>
+            <PhotoInput label={selectedStore.frontPhotoId ? "업체사진" : "업체사진"} onFile={saveStorePhoto} />
+            {selectedStore.frontPhotoId && <button className="danger full-button" onClick={removeStorePhoto}>지우기</button>}
             <p className={selectedStore.frontPhotoId ? "ok" : "warn"}>촬영 상태: {selectedStore.frontPhotoId ? "촬영완료" : "미촬영"}</p>
           </section>
           <Contacts items={storeItems} />
-          <button className="primary sticky-lite" onClick={() => setView("items")}>조사 입력</button>
+          <section className="panel">
+            <p>조사 품목: {storeItems.length.toLocaleString()}건</p>
+            <label>방문 조사일<input type="date" value={selectedStore.surveyDate} onChange={async (event) => { await putStore({ ...selectedStore, surveyDate: event.target.value, updatedAt: now() }); await refresh(selectedStore.region); }} /></label>
+            <button className="primary sticky-lite" onClick={() => setView("items")}>조사 입력</button>
+          </section>
         </main>
       )}
 
@@ -485,6 +496,16 @@ function Stats({ stats, totalLabel = "전체" }: { stats: RegionStats; totalLabe
   );
 }
 
+function RegionSummary({ stats, itemStats }: { stats: RegionStats; itemStats: RegionStats }) {
+  return (
+    <div className="region-summary">
+      <div><strong>업체</strong><span>완료 {stats.completed.toLocaleString()} / 전체 {stats.total.toLocaleString()}</span><em>미조사 {stats.notStarted.toLocaleString()}</em></div>
+      <div><strong>품목</strong><span>완료 {itemStats.completed.toLocaleString()} / 전체 {itemStats.total.toLocaleString()}</span><em>미조사 {itemStats.notStarted.toLocaleString()}</em></div>
+      <div className="stats-progress"><span style={{ width: `${stats.total ? Math.round((stats.completed / stats.total) * 100) : 0}%` }} /></div>
+    </div>
+  );
+}
+
 function Badge({ text }: { text: string }) {
   return <span className={`badge badge-${text}`}>{text}</span>;
 }
@@ -509,14 +530,14 @@ function StoreCard({ store, stats, items, focused, onOpen, onContacts }: { store
       </div>
       <div className="store-progress">
         <div className="store-progress-head">
-          <strong>품목: 완료 {stats.completed.toLocaleString()} / 전체 {stats.total.toLocaleString()}</strong>
+          <strong>업체: 완료 {stats.completed.toLocaleString()} / 전체 {stats.total.toLocaleString()}</strong>
           <span>미조사 {(stats.total - stats.completed).toLocaleString()}</span>
         </div>
         <div className="progress-line"><span style={{ width: `${percent}%` }} /></div>
       </div>
       <div className="store-meta">
         <span className={`store-photo-badge ${store.frontPhotoId ? "done" : ""}`}>업체사진</span>
-        <span className={stats.photoMissing > 0 ? "store-missing" : "store-photo-ok"}>{stats.photoMissing > 0 ? `사진누락 ${stats.photoMissing.toLocaleString()}개` : "사진"}</span>
+        {stats.photoMissing > 0 && <span className="store-missing">품목사진 누락 {stats.photoMissing.toLocaleString()}건</span>}
         <span className="store-date">조사일: {latestSurveyDate}</span>
       </div>
       <div className="card-actions">
