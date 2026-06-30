@@ -366,7 +366,7 @@ function App() {
           <div className="list">
             {storeItems.filter((item) => `${item.itemNo} ${item.productName} ${item.barcode}`.includes(query)).filter((item) => filter === "전체" || (filter === "사진누락" ? requiredPhotoLabels(item, photos.filter((photo) => photo.storeId === item.storeId)).length > 0 : item.status === filter)).map((item) => (
               <article className="card compact" key={item.id}>
-                <h2>{item.itemNo} {item.productName}</h2>
+                <h2 className="item-title"><span className="item-code">{item.itemNo}</span><span>{item.productName}</span></h2>
                 <p>바코드: {item.barcode || "-"} · 기준가격: {item.basePrice?.toLocaleString() ?? "-"}원</p>
                 <p>조사가격: {item.normalPrice?.toLocaleString() ?? "-"}원</p>
                 <Badge text={item.status} /><button className="primary" onClick={() => { setSelectedItemId(item.id); setView("item"); }}>조사 시작/수정</button>
@@ -640,7 +640,7 @@ function ItemEditor({ item, photos, onPhoto, onDeletePhoto, onSave }: { item: Su
       setIsSaving(false);
     }
   };
-  return <main className="page item-page"><section className="item-hero compact-hero"><div><h1>{draft.itemNo} {draft.productName}</h1><Badge text={draft.status} /></div></section>
+  return <main className="page item-page"><section className="item-hero compact-hero"><div><h1 className="item-title"><span className="item-code">{draft.itemNo}</span><span>{draft.productName}</span></h1><Badge text={draft.status} /></div></section>
     <ItemContact item={draft} />
     <details className="panel" open><summary>① 업체 제시정보</summary><Info item={draft} /></details>
     <section className="panel"><h2>② 실물 확인</h2><Choice label="정상진열" value={draft.normalDisplay} values={["O", "X"]} onChange={(value) => update({ normalDisplay: value as SurveyItem["normalDisplay"], photoCase: value === "X" ? "POS_ONLY" : value === "O" ? "NORMAL" : "" })} /><Choice label="규격일치" value={draft.specMatch} values={["O", "X", "-"]} onChange={(value) => update({ specMatch: value as SurveyItem["specMatch"] })} /><Choice label="바코드일치" value={draft.barcodeMatch} values={["O", "X", "-"]} onChange={(value) => update({ barcodeMatch: value as SurveyItem["barcodeMatch"] })} /></section>

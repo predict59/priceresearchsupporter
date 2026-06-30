@@ -66,6 +66,26 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .page-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 h1 { font-size: clamp(24px, 4vw, 34px); margin: 8px 0 18px; letter-spacing: 0; }
 h2 { font-size: 18px; margin: 0 0 10px; letter-spacing: 0; }
+.item-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.item-code {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  border-radius: 999px;
+  padding: 3px 9px;
+  background: #eef6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .9em;
+  font-weight: 900;
+  white-space: nowrap;
+}
 .panel, .card {
   background: #fff;
   border: 1px solid #dbe1e5;
