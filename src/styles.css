@@ -267,29 +267,49 @@ textarea { min-height: 110px; resize: vertical; }
 }
 .region-summary {
   display: grid;
-  gap: 7px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
   margin: 10px 0 14px;
 }
-.region-summary > div:not(.stats-progress) {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 8px;
+.region-metric {
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+.region-metric span {
   color: #52616b;
-  font-size: 13px;
-  font-weight: 800;
+  font-size: 12px;
+  font-weight: 900;
 }
-.region-summary strong {
+.region-metric strong {
   color: #17202a;
-  min-width: 34px;
+  font-size: 22px;
+  line-height: 1;
 }
-.region-summary b {
-  color: #0f766e;
-  font-size: 15px;
+.region-metric small {
+  color: #64748b;
+  font-size: 13px;
+  margin-left: 2px;
 }
-.region-summary em {
+.region-metric em {
   font-style: normal;
   color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+.mini-progress {
+  height: 5px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #e2e8f0;
+}
+.mini-progress i {
+  display: block;
+  height: 100%;
+  background: #0f766e;
 }
 .summary-grid {
   display: grid;

@@ -497,11 +497,22 @@ function Stats({ stats, totalLabel = "전체" }: { stats: RegionStats; totalLabe
 }
 
 function RegionSummary({ stats, itemStats }: { stats: RegionStats; itemStats: RegionStats }) {
+  const storePercent = stats.total ? Math.round((stats.completed / stats.total) * 100) : 0;
+  const itemPercent = itemStats.total ? Math.round((itemStats.completed / itemStats.total) * 100) : 0;
   return (
     <div className="region-summary">
-      <div><strong>업체</strong><span><b>{stats.completed.toLocaleString()}</b> / {stats.total.toLocaleString()} 완료</span><em>미조사 {stats.notStarted.toLocaleString()}</em></div>
-      <div><strong>품목</strong><span><b>{itemStats.completed.toLocaleString()}</b> / {itemStats.total.toLocaleString()} 완료</span><em>미조사 {itemStats.notStarted.toLocaleString()}</em></div>
-      <div className="stats-progress"><span style={{ width: `${stats.total ? Math.round((stats.completed / stats.total) * 100) : 0}%` }} /></div>
+      <div className="region-metric">
+        <span>업체</span>
+        <strong>{stats.completed.toLocaleString()}<small>/{stats.total.toLocaleString()}</small></strong>
+        <div className="mini-progress"><i style={{ width: `${storePercent}%` }} /></div>
+        <em>미조사 {stats.notStarted.toLocaleString()}</em>
+      </div>
+      <div className="region-metric">
+        <span>품목</span>
+        <strong>{itemStats.completed.toLocaleString()}<small>/{itemStats.total.toLocaleString()}</small></strong>
+        <div className="mini-progress"><i style={{ width: `${itemPercent}%` }} /></div>
+        <em>미조사 {itemStats.notStarted.toLocaleString()}</em>
+      </div>
     </div>
   );
 }
