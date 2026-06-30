@@ -654,6 +654,11 @@ function ItemEditor({ item, storeItems, photos, onPhoto, onDeletePhoto, onSave, 
   const [saveMessage, setSaveMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   useEffect(() => setDraft(item), [item.id]);
+  useEffect(() => {
+    if (!saveMessage) return;
+    const timer = window.setTimeout(() => setSaveMessage(""), 5000);
+    return () => window.clearTimeout(timer);
+  }, [saveMessage]);
   const update = (patch: Partial<SurveyItem>) => setDraft((old) => ({ ...old, ...patch, status: old.status === "미조사" ? "조사중" : old.status }));
   const missing = requiredPhotoLabels(draft, photos);
   const itemPhotos = {
