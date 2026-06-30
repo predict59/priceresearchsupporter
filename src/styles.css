@@ -323,6 +323,40 @@ textarea { min-height: 110px; resize: vertical; }
   cursor: pointer;
 }
 .photo-button input { display: none; }
+.photo-case-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.photo-case-grid button {
+  min-height: 72px;
+  padding: 10px;
+  display: grid;
+  gap: 3px;
+  align-content: center;
+  text-align: left;
+  justify-items: start;
+}
+.photo-case-grid button.active {
+  border-color: #0f766e;
+  background: #ecfdf5;
+  color: #0f766e;
+}
+.photo-case-grid strong {
+  font-size: 15px;
+}
+.photo-case-grid span,
+.photo-rule,
+.small-help {
+  font-size: 13px;
+  line-height: 1.4;
+}
+.photo-rule,
+.small-help {
+  color: #64748b;
+  margin: 4px 0 12px;
+}
 .photo-picker {
   display: grid;
   gap: 8px;
@@ -401,6 +435,26 @@ textarea { min-height: 110px; resize: vertical; }
 }
 .inline-check input { width: auto; min-height: auto; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.abnormal-block {
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid #e5ebef;
+}
+.memo-block {
+  padding: 12px;
+  border: 1px solid #e5ebef;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+.memo-block h3 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+.memo-chips button {
+  min-height: 34px;
+  font-size: 13px;
+  background: #fff;
+}
 .bottom-bar {
   position: fixed;
   left: 0;
@@ -561,6 +615,7 @@ textarea { min-height: 110px; resize: vertical; }
   .card-actions { grid-template-columns: 1fr; }
   .item-contact { grid-template-columns: 1fr; }
   .item-contact a { justify-content: center; }
+  .photo-case-grid { grid-template-columns: 1fr; }
   .photo-actions { grid-template-columns: 1fr; }
   .photo-picker > div { grid-template-columns: 1fr 1fr; }
   .save-fab { right: 12px; bottom: 14px; }

@@ -1,6 +1,6 @@
 import JSZip from "jszip";
 import * as XLSX from "xlsx";
-import { downloadBlob, safeFilePart } from "./logic";
+import { downloadBlob, photoCaseOf, safeFilePart } from "./logic";
 import type { AppSettings, BackupPayload, SurveyItem, SurveyPhoto, SurveyStore } from "./types";
 
 const stamp = () => new Date().toISOString().slice(0, 10).replaceAll("-", "");
@@ -105,10 +105,11 @@ export async function exportRegionZip(region: string, stores: SurveyStore[], ite
     const display = photoOf(photos, "PRODUCT_DISPLAY", item);
     const info = photoOf(photos, "PRODUCT_INFO_BARCODE", item);
     const pos = photoOf(photos, "POS_RECEIPT", item);
-    if (front) zip.file(`${item.itemNo}.1.jpg`, front.blob);
-    if (item.normalDisplay === "X") {
+    const photoCase = photoCaseOf(item);
+    if (front && photoCase !== "MISSING") zip.file(`${item.itemNo}.1.jpg`, front.blob);
+    if (photoCase === "POS_ONLY") {
       if (pos) zip.file(`${item.itemNo}.2.jpg`, pos.blob);
-    } else {
+    } else if (photoCase === "NORMAL") {
       if (display) zip.file(`${item.itemNo}.2.jpg`, display.blob);
       if (info) zip.file(`${item.itemNo}.3.jpg`, info.blob);
     }

@@ -1,6 +1,7 @@
 export type Status = "미조사" | "조사중" | "완료";
 export type StoreStatus = "미시작" | "진행중" | "완료";
 export type PhotoType = "STORE_FRONT" | "PRODUCT_DISPLAY" | "PRODUCT_INFO_BARCODE" | "POS_RECEIPT";
+export type PhotoCase = "" | "NORMAL" | "POS_ONLY" | "MISSING";
 
 export type Region = {
   name: string;
@@ -57,6 +58,7 @@ export type SurveyItem = {
   discountOral?: boolean;
   priceJudgment: "" | "동일" | "고가" | "저가" | "확인필요";
   abnormalDisplay?: "" | "O" | "X";
+  photoCase?: PhotoCase;
   barcodeRegistered: "" | "O" | "X";
   abnormalStatus: "" | "미진열" | "미판매";
   posChecked: "" | "조회함" | "조회불가" | "미조회";

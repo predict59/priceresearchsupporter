@@ -3,8 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import { clearAllData, deletePhoto, getItems, getPhotosByRegion, getPhotosByStore, getRegions, getSettings, getStores, importRegionData, now, putItem, putPhoto, putStore, saveParsedData, saveSettings, today, uid } from "./db";
 import { parseContactRows, parseSurveyWorkbook, mergeContacts, rebuildStoresAndRegions } from "./excel";
 import { dataUrlToBlob, exportBackup, exportRegionExcel, exportRegionZip } from "./exporters";
-import { mapSearchAddress, requiredPhotoLabels, summarize } from "./logic";
-import type { AppSettings, BackupPayload, PhotoType, Region, RegionStats, SurveyItem, SurveyPhoto, SurveyStore } from "./types";
+import { mapSearchAddress, photoCaseOf, requiredPhotoLabels, summarize } from "./logic";
+import type { AppSettings, BackupPayload, PhotoCase, PhotoType, Region, RegionStats, SurveyItem, SurveyPhoto, SurveyStore } from "./types";
 
 type View = "upload" | "regions" | "workspace" | "store" | "items" | "item" | "backup" | "validation";
 type Filter = "전체" | "미조사" | "조사중" | "완료" | "사진누락";
@@ -591,13 +591,18 @@ function ItemEditor({ item, photos, onPhoto, onDeletePhoto, onSave }: { item: Su
   useEffect(() => setDraft(item), [item.id]);
   const update = (patch: Partial<SurveyItem>) => setDraft((old) => ({ ...old, ...patch, status: old.status === "미조사" ? "조사중" : old.status }));
   const missing = requiredPhotoLabels(draft, photos);
+  const photoCase = photoCaseOf(draft);
   const itemPhotos = {
     display: photos.find((photo) => photo.itemId === draft.id && photo.type === "PRODUCT_DISPLAY"),
     info: photos.find((photo) => photo.itemId === draft.id && photo.type === "PRODUCT_INFO_BARCODE"),
     pos: photos.find((photo) => photo.itemId === draft.id && photo.type === "POS_RECEIPT"),
   };
   const nextBlank = () => {
-    const target = !itemPhotos.display ? "photo-product-display" : !itemPhotos.info ? "photo-product-info" : !itemPhotos.pos ? "photo-pos-receipt" : "";
+    const target = photoCase === "POS_ONLY"
+      ? (!itemPhotos.pos ? "photo-pos-receipt" : "")
+      : photoCase === "NORMAL"
+        ? (!itemPhotos.display ? "photo-product-display" : !itemPhotos.info ? "photo-product-info" : "")
+        : "";
     if (target) document.getElementById(`${target}-slot`)?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
   const upload = async (type: PhotoType, file: File, label: string) => {
@@ -625,12 +630,12 @@ function ItemEditor({ item, photos, onPhoto, onDeletePhoto, onSave }: { item: Su
   };
   return <main className="page item-page"><section className="item-hero compact-hero"><div><h1>{draft.itemNo} {draft.productName}</h1><Badge text={draft.status} /></div></section>
     <ItemContact item={draft} />
-    <section className="panel"><h2>① 사진자료</h2><p>업체사진: {photos.some((photo) => photo.type === "STORE_FRONT") ? "촬영완료" : "미촬영"} (ZIP 내보내기 시 품목별 .1 파일로 복사)</p>{photoMessage && <p className="ok upload-message">{photoMessage}</p>}<PhotoSlot id="photo-product-display" label="제품진열사진" photo={itemPhotos.display} onFile={(file) => upload("PRODUCT_DISPLAY", file, "제품진열사진")} onDelete={onDeletePhoto} /><PhotoSlot id="photo-product-info" label="제품정보/후면/바코드사진" photo={itemPhotos.info} onFile={(file) => upload("PRODUCT_INFO_BARCODE", file, "제품정보/후면/바코드사진")} onDelete={onDeletePhoto} /><PhotoSlot id="photo-pos-receipt" label="POS/영수증사진" photo={itemPhotos.pos} onFile={(file) => upload("POS_RECEIPT", file, "POS/영수증사진")} onDelete={onDeletePhoto} /><button className="row-button" onClick={nextBlank}>다음 빈칸으로 이동</button>{missing.length > 0 && <p className="warn">사진누락: {missing.join(", ")}</p>}</section>
+    <section className="panel"><h2>① 사진자료</h2><PhotoCasePicker value={photoCase} onChange={(value) => update({ photoCase: value })} /><p className="photo-rule">업체사진: {photos.some((photo) => photo.type === "STORE_FRONT") ? "촬영완료" : "미촬영"} · 선택한 사진 케이스에 맞춰 ZIP 파일명이 생성됩니다.</p>{photoMessage && <p className="ok upload-message">{photoMessage}</p>}{photoCase === "NORMAL" && <><PhotoSlot id="photo-product-display" label="제품진열사진" photo={itemPhotos.display} onFile={(file) => upload("PRODUCT_DISPLAY", file, "제품진열사진")} onDelete={onDeletePhoto} /><PhotoSlot id="photo-product-info" label="제품정보/후면/바코드사진" photo={itemPhotos.info} onFile={(file) => upload("PRODUCT_INFO_BARCODE", file, "제품정보/후면/바코드사진")} onDelete={onDeletePhoto} /></>}{photoCase === "POS_ONLY" && <PhotoSlot id="photo-pos-receipt" label="POS/영수증사진" photo={itemPhotos.pos} onFile={(file) => upload("POS_RECEIPT", file, "POS/영수증사진")} onDelete={onDeletePhoto} />}{photoCase === "MISSING" && <p className="notice">사진 촬영이 불가하거나 물품을 확인하지 못한 경우입니다. 필요하면 아래 비고에 사유를 적어주세요.</p>}<button className="row-button" onClick={nextBlank} disabled={photoCase === "MISSING"}>다음 빈칸으로 이동</button>{missing.length > 0 && <p className="warn">사진누락: {missing.join(", ")}</p>}</section>
     <details className="panel" open><summary>② 업체 제시정보</summary><Info item={draft} /></details>
     <section className="panel"><h2>③ 실물 확인</h2><Choice label="정상진열" value={draft.normalDisplay} values={["O", "X"]} onChange={(value) => update({ normalDisplay: value as SurveyItem["normalDisplay"] })} /><Choice label="규격일치" value={draft.specMatch} values={["O", "X", "-"]} onChange={(value) => update({ specMatch: value as SurveyItem["specMatch"] })} /><Choice label="바코드일치" value={draft.barcodeMatch} values={["O", "X", "-"]} onChange={(value) => update({ barcodeMatch: value as SurveyItem["barcodeMatch"] })} /></section>
     <section className="panel"><h2>④ 가격 판단</h2><Money label="정상가" value={draft.normalPrice} onChange={(value) => update({ normalPrice: num(value) })} /><Choice label="할인 여부" value={draft.hasDiscount === null ? "" : draft.hasDiscount ? "할인 있음" : "할인 없음"} values={["할인 없음", "할인 있음"]} onChange={(value) => update({ hasDiscount: value === "할인 있음" })} /><Money label="할인가" value={draft.discountPrice} onChange={(value) => update({ discountPrice: num(value) })} /><label>할인 시작일<input type="date" value={draft.discountStartDate} onChange={(event) => update({ discountStartDate: event.target.value })} /></label><label>할인 종료일<input type="date" value={draft.discountEndDate} onChange={(event) => update({ discountEndDate: event.target.value })} /></label><DiscountPeriod value={draft.discountType} oral={draft.discountOral ?? draft.discountType.includes("구두")} onChange={(discountType, discountOral) => update({ discountType, discountOral })} />{draft.basePrice !== null && draft.normalPrice !== null && <p className="notice">참고: 정상가가 기준가격보다 {draft.normalPrice < draft.basePrice ? "낮습니다" : draft.normalPrice > draft.basePrice ? "높습니다" : "같습니다"}.</p>}</section>
     <section className="panel"><h2>⑤ 진열상태</h2>{draft.normalDisplay === "X" ? <><Choice label="바코드 등록 여부" value={draft.barcodeRegistered} values={["O", "X"]} onChange={(value) => update({ barcodeRegistered: value as SurveyItem["barcodeRegistered"] })} /><Choice label="상태" value={draft.abnormalStatus} values={["미진열", "미판매"]} onChange={(value) => update({ abnormalStatus: value as SurveyItem["abnormalStatus"] })} /><Choice label="POS 조회 여부" value={draft.posChecked} values={["조회함", "조회불가", "미조회"]} onChange={(value) => update({ posChecked: value as SurveyItem["posChecked"] })} /><Money label="POS 확인 가격" value={draft.posPrice} onChange={(value) => update({ posPrice: num(value) })} /></> : <p className="notice">정상진열 X일 때만 바코드 등록 여부, 미진열/미판매, POS 정보를 입력합니다.</p>}</section>
-    <section className="panel"><h2>⑥ 특이사항</h2><Choice label="비정상진열" value={draft.abnormalDisplay ?? ""} values={["O", "X"]} onChange={(value) => update({ abnormalDisplay: value as SurveyItem["abnormalDisplay"] })} />{draft.abnormalDisplay === "O" && <p className="warn">비정상진열이면 어떤 위치에 어떻게 진열되어 있었는지 특이사항에 적어주세요.</p>}<div className="chips">{["가격표 수기 작성", "POS 확인", "규격 불일치", "바코드 불일치", "장기 할인", "구두 확인", "비정상진열", "미진열", "미판매", "폐점", "품절", "기타"].map((text) => <button key={text} onClick={() => update({ memo: draft.memo ? `${draft.memo} / ${text}` : text })}>{text}</button>)}</div><textarea placeholder="예: 같은 카테고리 매대가 아닌 행사 매대에 단독 진열 / 위치 혼재 / 진열 위치 확인 필요" value={draft.memo} onChange={(event) => update({ memo: event.target.value })} /></section>
+    <section className="panel"><h2>⑥ 특이사항</h2><div className="abnormal-block"><Choice label="비정상진열" value={draft.abnormalDisplay ?? ""} values={["O", "X"]} onChange={(value) => update({ abnormalDisplay: value as SurveyItem["abnormalDisplay"] })} />{draft.abnormalDisplay === "O" && <p className="small-help warn">비정상진열이면 어떤 위치에 어떻게 진열되어 있었는지 아래 비고에 적어주세요.</p>}</div><div className="memo-block"><h3>비고</h3><p className="small-help">자주 쓰는 문구를 누르면 비고에 추가됩니다.</p><div className="chips memo-chips">{["가격표 수기 작성", "POS 확인", "규격 불일치", "바코드 불일치", "장기 할인", "구두 확인", "비정상진열", "미진열", "미판매", "폐점", "품절", "기타"].map((text) => <button key={text} onClick={() => update({ memo: draft.memo ? `${draft.memo} / ${text}` : text })}>{text}</button>)}</div><textarea placeholder="예: 같은 카테고리 매대가 아닌 행사 매대에 단독 진열 / 사진 촬영 불가 / POS 확인" value={draft.memo} onChange={(event) => update({ memo: event.target.value })} /></div></section>
     {saveMessage && <div className={`save-toast ${saveMessage.includes("실패") ? "danger-toast" : ""}`}>{saveMessage}</div>}
     <button type="button" className="save-fab primary" onClick={handleSave} disabled={isSaving} aria-label="저장"><CheckCircle2 size={22} />{isSaving ? "저장 중" : "저장"}</button>
   </main>;
@@ -647,6 +652,24 @@ function PhotoSlot({ id, label, photo, onFile, onDelete }: { id: string; label: 
         <PhotoInput id={id} label={photo ? "다시 올리기" : "촬영/첨부"} onFile={onFile} />
         {photo && <button className="danger" onClick={() => onDelete(photo)}>지우기</button>}
       </div>
+    </div>
+  );
+}
+
+function PhotoCasePicker({ value, onChange }: { value: PhotoCase; onChange: (value: PhotoCase) => void }) {
+  const options: Array<{ value: PhotoCase; title: string; desc: string }> = [
+    { value: "NORMAL", title: "정상사진", desc: "제품진열 + 후면/바코드" },
+    { value: "POS_ONLY", title: "POS사진", desc: "상품 미발견, POS 확인" },
+    { value: "MISSING", title: "사진누락", desc: "촬영 불가/확인 불가" },
+  ];
+  return (
+    <div className="photo-case-grid">
+      {options.map((option) => (
+        <button key={option.value} className={value === option.value ? "active" : ""} onClick={() => onChange(option.value)}>
+          <strong>{option.title}</strong>
+          <span>{option.desc}</span>
+        </button>
+      ))}
     </div>
   );
 }

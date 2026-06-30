@@ -5,19 +5,26 @@ export function photosForItem(item: SurveyItem, storePhotos: SurveyPhoto[]) {
 }
 
 export function requiredPhotoLabels(item: SurveyItem, photos: SurveyPhoto[]) {
+  const photoCase = item.photoCase || (item.normalDisplay === "X" ? "POS_ONLY" : "NORMAL");
   const hasFront = photos.some((photo) => photo.type === "STORE_FRONT");
   const hasDisplay = photos.some((photo) => photo.type === "PRODUCT_DISPLAY" && photo.itemId === item.id);
   const hasInfo = photos.some((photo) => photo.type === "PRODUCT_INFO_BARCODE" && photo.itemId === item.id);
   const hasPos = photos.some((photo) => photo.type === "POS_RECEIPT" && photo.itemId === item.id);
   const missing: string[] = [];
   if (!hasFront) missing.push("업체사진");
-  if (item.normalDisplay === "X") {
+  if (photoCase === "MISSING") {
+    missing.push("물품 사진 전체 누락");
+  } else if (photoCase === "POS_ONLY") {
     if (!hasPos) missing.push("POS/영수증사진");
   } else {
     if (!hasDisplay) missing.push("제품진열사진");
     if (!hasInfo) missing.push("제품정보/후면/바코드사진");
   }
   return missing;
+}
+
+export function photoCaseOf(item: SurveyItem) {
+  return item.photoCase || (item.normalDisplay === "X" ? "POS_ONLY" : "NORMAL");
 }
 
 export function isPhotoMissing(item: SurveyItem, photos: SurveyPhoto[]) {
