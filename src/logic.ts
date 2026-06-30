@@ -12,7 +12,7 @@ export function requiredPhotoLabels(item: SurveyItem, photos: SurveyPhoto[]) {
 }
 
 export function productPhotoMissingLabels(item: SurveyItem, photos: SurveyPhoto[]) {
-  const photoCase = item.photoCase || (item.normalDisplay === "X" ? "POS_ONLY" : "NORMAL");
+  const photoCase = photoCaseOf(item);
   const hasDisplay = photos.some((photo) => photo.type === "PRODUCT_DISPLAY" && photo.itemId === item.id);
   const hasInfo = photos.some((photo) => photo.type === "PRODUCT_INFO_BARCODE" && photo.itemId === item.id);
   const hasPos = photos.some((photo) => photo.type === "POS_RECEIPT" && photo.itemId === item.id);
@@ -29,7 +29,9 @@ export function productPhotoMissingLabels(item: SurveyItem, photos: SurveyPhoto[
 }
 
 export function photoCaseOf(item: SurveyItem) {
-  return item.photoCase || (item.normalDisplay === "X" ? "POS_ONLY" : "NORMAL");
+  if (item.normalDisplay === "X") return "POS_ONLY";
+  if (item.normalDisplay === "O") return "NORMAL";
+  return item.photoCase || "NORMAL";
 }
 
 export function isPhotoMissing(item: SurveyItem, photos: SurveyPhoto[]) {
