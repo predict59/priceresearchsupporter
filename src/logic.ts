@@ -49,11 +49,25 @@ export function mapSearchAddress(address: string) {
   return address.replace(/^\s*\(?\d{5}\)?\s*/g, "").trim();
 }
 
-export function downloadBlob(blob: Blob, filename: string) {
+export async function downloadBlob(blob: Blob, filename: string) {
+  const file = new File([blob], filename, { type: blob.type || "application/octet-stream" });
+  const shareTarget = navigator as Navigator & {
+    canShare?: (data: ShareData) => boolean;
+    share?: (data: ShareData) => Promise<void>;
+  };
+  if (shareTarget.canShare?.({ files: [file] }) && shareTarget.share) {
+    try {
+      await shareTarget.share({ files: [file], title: filename });
+      return;
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+    }
+  }
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = filename;
+  anchor.target = "_self";
   anchor.rel = "noopener";
   anchor.style.display = "none";
   document.body.appendChild(anchor);

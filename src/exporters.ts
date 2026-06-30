@@ -10,7 +10,7 @@ function photoOf(photos: SurveyPhoto[], type: SurveyPhoto["type"], item?: Survey
   return photos.find((photo) => photo.type === type && (item ? photo.itemId === item.id : true) && (store ? photo.storeId === store.id : true));
 }
 
-export function exportRegionExcel(region: string, items: SurveyItem[]) {
+export async function exportRegionExcel(region: string, items: SurveyItem[]) {
   const group = [
     "기준 정보",
     "기준 정보",
@@ -94,7 +94,7 @@ export function exportRegionExcel(region: string, items: SurveyItem[]) {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "조사결과");
   const buffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-  downloadBlob(new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), `국군복지단_가격조사표_${safeFilePart(region)}_${stamp()}.xlsx`);
+  await downloadBlob(new Blob([buffer], { type: "application/octet-stream" }), `price_survey_${safeFilePart(region)}_${stamp()}.xlsx`);
 }
 
 export async function exportRegionZip(region: string, stores: SurveyStore[], items: SurveyItem[], photos: SurveyPhoto[]) {
@@ -113,7 +113,7 @@ export async function exportRegionZip(region: string, stores: SurveyStore[], ite
       if (info) zip.file(`${item.itemNo}.3.jpg`, info.blob);
     }
   });
-  downloadBlob(await zip.generateAsync({ type: "blob" }), `국군복지단_가격조사사진_${safeFilePart(region)}_${stamp()}.zip`);
+  await downloadBlob(await zip.generateAsync({ type: "blob", mimeType: "application/zip" }), `price_photos_${safeFilePart(region)}_${stamp()}.zip`);
 }
 
 const blobToDataUrl = (blob: Blob) =>
@@ -143,7 +143,7 @@ export async function exportBackup(region: string | undefined, stores: SurveySto
     settings,
   };
   const suffix = region ? safeFilePart(region) : "전체";
-  downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }), `국군복지단_가격조사_백업_${suffix}_${stampTime()}.json`);
+  await downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }), `price_backup_${suffix}_${stampTime()}.json`);
 }
 
 export async function dataUrlToBlob(dataUrl: string) {

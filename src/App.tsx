@@ -182,7 +182,7 @@ function App() {
 
   async function doExportExcel(region = currentRegion) {
     if (!region) return;
-    exportRegionExcel(region, items.filter((item) => item.region === region));
+    await exportRegionExcel(region, items.filter((item) => item.region === region));
   }
 
   async function doExportZip(region = currentRegion) {
