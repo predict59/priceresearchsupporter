@@ -499,8 +499,8 @@ function Stats({ stats, totalLabel = "전체" }: { stats: RegionStats; totalLabe
 function RegionSummary({ stats, itemStats }: { stats: RegionStats; itemStats: RegionStats }) {
   return (
     <div className="region-summary">
-      <div><strong>업체</strong><span>완료 {stats.completed.toLocaleString()} / 전체 {stats.total.toLocaleString()}</span><em>미조사 {stats.notStarted.toLocaleString()}</em></div>
-      <div><strong>품목</strong><span>완료 {itemStats.completed.toLocaleString()} / 전체 {itemStats.total.toLocaleString()}</span><em>미조사 {itemStats.notStarted.toLocaleString()}</em></div>
+      <div><strong>업체</strong><span><b>{stats.completed.toLocaleString()}</b> / {stats.total.toLocaleString()} 완료</span><em>미조사 {stats.notStarted.toLocaleString()}</em></div>
+      <div><strong>품목</strong><span><b>{itemStats.completed.toLocaleString()}</b> / {itemStats.total.toLocaleString()} 완료</span><em>미조사 {itemStats.notStarted.toLocaleString()}</em></div>
       <div className="stats-progress"><span style={{ width: `${stats.total ? Math.round((stats.completed / stats.total) * 100) : 0}%` }} /></div>
     </div>
   );
