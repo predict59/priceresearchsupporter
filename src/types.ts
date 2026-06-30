@@ -18,6 +18,7 @@ export type SurveyStore = {
   city?: string;
   storeName: string;
   storeAddress: string;
+  visitOrder?: number;
   itemCount: number;
   completedCount: number;
   surveyDate: string;

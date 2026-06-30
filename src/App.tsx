@@ -8,7 +8,7 @@ import type { AppSettings, BackupPayload, PhotoType, Region, RegionStats, Survey
 
 type View = "upload" | "regions" | "workspace" | "store" | "items" | "item" | "backup" | "validation";
 type Filter = "전체" | "미완료" | "미조사" | "조사중" | "완료" | "사진누락";
-type StoreSort = "품목 많은 순" | "미완료 많은 순" | "사진누락 많은 순" | "주소순";
+type StoreSort = "방문순서" | "주소순" | "품목 많은 순" | "미완료 많은 순" | "사진누락 많은 순";
 
 const mapLinks = (address: string) => [
   ["구글", `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapSearchAddress(address))}`],
@@ -40,6 +40,7 @@ function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [storeSort, setStoreSort] = useState<StoreSort>("주소순");
+  const [orderEditing, setOrderEditing] = useState(false);
   const [workspaceToolsOpen, setWorkspaceToolsOpen] = useState(false);
   const [itemToolsOpen, setItemToolsOpen] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
@@ -48,17 +49,30 @@ function App() {
   const currentRegion = settings.currentRegion;
   const regionItems = useMemo(() => items.filter((item) => item.region === currentRegion), [items, currentRegion]);
   const regionStores = useMemo(() => stores.filter((store) => store.region === currentRegion), [stores, currentRegion]);
+  const storeVisitCompare = (a: SurveyStore, b: SurveyStore) =>
+    (a.visitOrder ?? 999999) - (b.visitOrder ?? 999999) || `${a.storeAddress} ${a.storeName}`.localeCompare(`${b.storeAddress} ${b.storeName}`, "ko");
   const sortedRegionStores = useMemo(() => {
     const statsOf = (storeId: string) => summarize(regionItems.filter((item) => item.storeId === storeId), photos.filter((photo) => photo.storeId === storeId));
     return [...regionStores].sort((a, b) => {
       const as = statsOf(a.id);
       const bs = statsOf(b.id);
+      if (storeSort === "방문순서") return storeVisitCompare(a, b);
       if (storeSort === "품목 많은 순") return bs.total - as.total;
       if (storeSort === "사진누락 많은 순") return bs.photoMissing - as.photoMissing;
       if (storeSort === "주소순") return `${a.storeAddress} ${a.storeName}`.localeCompare(`${b.storeAddress} ${b.storeName}`, "ko");
       return (bs.notStarted + bs.inProgress) - (as.notStarted + as.inProgress);
     });
   }, [regionStores, regionItems, photos, storeSort]);
+  const visibleRegionStores = useMemo(() => sortedRegionStores.filter((store) => {
+    if (!`${store.storeName} ${store.storeAddress}`.includes(query)) return false;
+    const ownItems = regionItems.filter((item) => item.storeId === store.id);
+    const ownPhotos = photos.filter((photo) => photo.storeId === store.id);
+    const ownStats = summarize(ownItems, ownPhotos);
+    if (filter === "미완료" && ownStats.completed >= ownStats.total) return false;
+    if (filter !== "전체" && filter !== "미완료" && filter !== "사진누락" && !ownItems.some((item) => item.status === filter)) return false;
+    if (filter === "사진누락" && ownStats.photoMissing === 0) return false;
+    return true;
+  }), [sortedRegionStores, query, regionItems, photos, filter]);
   const selectedStore = stores.find((store) => store.id === selectedStoreId);
   const storeItems = useMemo(() => items.filter((item) => item.storeId === selectedStoreId), [items, selectedStoreId]);
   const selectedItem = items.find((item) => item.id === selectedItemId);
@@ -146,6 +160,22 @@ function App() {
     setSelectedStoreId(store.id);
     await updateSettings({ lastOpenedStoreId: store.id, currentRegion: store.region });
     setView("store");
+  }
+
+  async function saveVisitOrder(store: SurveyStore, value: string) {
+    const order = Number(value.replace(/\D/g, ""));
+    await putStore({ ...store, visitOrder: order || undefined, updatedAt: now() });
+    await refresh(store.region);
+  }
+
+  async function moveVisitOrder(store: SurveyStore, direction: -1 | 1) {
+    const ordered = [...regionStores].sort(storeVisitCompare);
+    const index = ordered.findIndex((candidate) => candidate.id === store.id);
+    const nextIndex = index + direction;
+    if (index < 0 || nextIndex < 0 || nextIndex >= ordered.length) return;
+    [ordered[index], ordered[nextIndex]] = [ordered[nextIndex], ordered[index]];
+    await Promise.all(ordered.map((candidate, orderIndex) => putStore({ ...candidate, visitOrder: orderIndex + 1, updatedAt: now() })));
+    await refresh(store.region);
   }
 
   async function saveStorePhoto(file: File) {
@@ -338,24 +368,45 @@ function App() {
               <FilterBar filter={filter} setFilter={setFilter} />
               <label className="sort-control">정렬
                 <select value={storeSort} onChange={(event) => setStoreSort(event.target.value as StoreSort)}>
+                  <option>방문순서</option>
                   <option>주소순</option>
                   <option>미완료 많은 순</option>
                   <option>품목 많은 순</option>
                   <option>사진누락 많은 순</option>
                 </select>
               </label>
+              <button
+                className={`order-edit-toggle ${orderEditing ? "active" : ""}`}
+                onClick={() => {
+                  setOrderEditing((value) => !value);
+                  setStoreSort("방문순서");
+                }}
+              >
+                순서 편집 {orderEditing ? "끄기" : "켜기"}
+              </button>
               <a className="map-ref" target="_blank" href="https://www.google.com/maps/d/u/1/viewer?mid=1ej99Lo6WS4GROBCQPr0a66MhQR_vXuM&ll=37.49945198941339%2C127.04262669775987&z=14">조사대상 참고 지도 열기</a>
             </section>
           )}
           <div className="list">
-            {sortedRegionStores.filter((store) => `${store.storeName} ${store.storeAddress}`.includes(query)).map((store) => {
+            {visibleRegionStores.map((store) => {
               const ownItems = regionItems.filter((item) => item.storeId === store.id);
               const ownPhotos = photos.filter((photo) => photo.storeId === store.id);
               const ownStats = summarize(ownItems, ownPhotos);
-              if (filter === "미완료" && ownStats.completed >= ownStats.total) return null;
-              if (filter !== "전체" && filter !== "미완료" && filter !== "사진누락" && !ownItems.some((item) => item.status === filter)) return null;
-              if (filter === "사진누락" && ownStats.photoMissing === 0) return null;
-              return <StoreCard key={store.id} store={store} stats={ownStats} items={ownItems} focused={selectedStoreId === store.id} onOpen={() => openStore(store)} onContacts={() => setContactStoreId(store.id)} />;
+              return (
+                <StoreCard
+                  key={store.id}
+                  store={store}
+                  stats={ownStats}
+                  items={ownItems}
+                  focused={selectedStoreId === store.id}
+                  orderEditing={orderEditing}
+                  onOpen={() => openStore(store)}
+                  onContacts={() => setContactStoreId(store.id)}
+                  onOrderChange={(value) => saveVisitOrder(store, value)}
+                  onMoveUp={() => moveVisitOrder(store, -1)}
+                  onMoveDown={() => moveVisitOrder(store, 1)}
+                />
+              );
             })}
           </div>
         </main>
@@ -522,7 +573,29 @@ function Badge({ text }: { text: string }) {
   return <span className={`badge badge-${text}`}>{text}</span>;
 }
 
-function StoreCard({ store, stats, items, focused, onOpen, onContacts }: { store: SurveyStore; stats: RegionStats; items: SurveyItem[]; focused: boolean; onOpen: () => void; onContacts: () => void }) {
+function StoreCard({
+  store,
+  stats,
+  items,
+  focused,
+  orderEditing,
+  onOpen,
+  onContacts,
+  onOrderChange,
+  onMoveUp,
+  onMoveDown,
+}: {
+  store: SurveyStore;
+  stats: RegionStats;
+  items: SurveyItem[];
+  focused: boolean;
+  orderEditing: boolean;
+  onOpen: () => void;
+  onContacts: () => void;
+  onOrderChange: (value: string) => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+}) {
   const completed = items.filter((item) => item.status === "완료");
   const latestSurveyDate = completed.map((item) => item.surveyDate).filter(Boolean).sort().at(-1) ?? "-";
   const percent = stats.total ? Math.round((stats.completed / stats.total) * 100) : 0;
@@ -552,6 +625,16 @@ function StoreCard({ store, stats, items, focused, onOpen, onContacts }: { store
         {stats.photoMissing > 0 && <span className="store-missing">품목사진 누락 {stats.photoMissing.toLocaleString()}건</span>}
         <span className="store-date">조사일: {latestSurveyDate}</span>
       </div>
+      {orderEditing && (
+        <div className="visit-order-editor">
+          <label>
+            방문순서
+            <input inputMode="numeric" value={store.visitOrder ?? ""} placeholder="-" onChange={(event) => onOrderChange(event.target.value)} />
+          </label>
+          <button type="button" onClick={onMoveUp}>위로</button>
+          <button type="button" onClick={onMoveDown}>아래로</button>
+        </div>
+      )}
       <div className="card-actions">
         <button onClick={onContacts}><Phone size={16} />담당자 정보</button>
         <button className="primary" onClick={onOpen}>입력</button>

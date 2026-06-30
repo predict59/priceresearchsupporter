@@ -336,6 +336,19 @@ textarea { min-height: 110px; resize: vertical; }
   align-items: center;
   gap: 10px;
 }
+.order-edit-toggle {
+  width: fit-content;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 800;
+}
+.order-edit-toggle.active {
+  background: #ecfeff;
+  border-color: #67e8f9;
+  color: #155e75;
+}
 .area-summary {
   margin: -2px 0 8px;
   color: #334155;
@@ -753,6 +766,34 @@ textarea { min-height: 110px; resize: vertical; }
 .store-date {
   grid-column: 3;
   justify-self: end;
+}
+.visit-order-editor {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 6px;
+  align-items: end;
+  margin: 0 0 12px;
+  padding: 8px;
+  border: 1px dashed #c9d2d8;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+.visit-order-editor label {
+  margin: 0;
+  font-size: 12px;
+  color: #52616b;
+}
+.visit-order-editor input {
+  min-height: 34px;
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: 900;
+}
+.visit-order-editor button {
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 900;
 }
 .store-card.focused {
   border-color: #0f766e;
