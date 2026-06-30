@@ -306,7 +306,7 @@ function App() {
         </div>
         <div className="top-actions">
           <button onClick={() => { setView("regions"); setMenuOpen(false); }}>지역 선택</button>
-          <button disabled={!currentRegion} onClick={() => { setView("validation"); setMenuOpen(false); }}>검증 보기</button>
+          <button disabled={!currentRegion} onClick={() => { setView("validation"); setMenuOpen(false); }}>검증</button>
           <button onClick={() => { setView("backup"); setMenuOpen(false); }}>백업/복원</button>
         </div>
       </header>
@@ -467,7 +467,6 @@ function App() {
 
       {view === "validation" && (
         <main className="page">
-          <h1>검증</h1>
           <Validation title="미완료 품목" items={regionItems.filter((item) => item.status !== "완료")} open={(id) => { setSelectedItemId(id); setView("item"); }} />
           <Validation title="사진누락 품목" items={regionItems.filter((item) => requiredPhotoLabels(item, photos.filter((photo) => photo.storeId === item.storeId)).length > 0)} open={(id) => { setSelectedItemId(id); setView("item"); }} />
           <Validation title="정상진열 X 품목" items={regionItems.filter((item) => item.normalDisplay === "X")} open={(id) => { setSelectedItemId(id); setView("item"); }} />
@@ -477,7 +476,6 @@ function App() {
 
       {view === "backup" && (
         <main className="page narrow">
-          <h1>백업/복원</h1>
           <section className="backup-grid">
             <article className="panel">
               <h2>백업 내려받기</h2>
