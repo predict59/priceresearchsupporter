@@ -29,14 +29,62 @@ type BarcodeDetectorConstructor = new (options?: { formats?: string[] }) => {
 const barcodeFormats = ["ean_13", "ean_8", "code_128", "code_39", "code_93", "upc_a", "upc_e", "itf"];
 const onlyDigits = (value: string) => value.replace(/\D/g, "");
 
+function barcodeScanRegions(width: number, height: number) {
+  const regions = [{ x: 0, y: 0, width, height }];
+  const addGrid = (cols: number, rows: number, overlap = 0.18) => {
+    const cellW = width / cols;
+    const cellH = height / rows;
+    for (let row = 0; row < rows; row += 1) {
+      for (let col = 0; col < cols; col += 1) {
+        const x = Math.max(0, col * cellW - cellW * overlap);
+        const y = Math.max(0, row * cellH - cellH * overlap);
+        const right = Math.min(width, (col + 1) * cellW + cellW * overlap);
+        const bottom = Math.min(height, (row + 1) * cellH + cellH * overlap);
+        regions.push({ x, y, width: right - x, height: bottom - y });
+      }
+    }
+  };
+  addGrid(2, 2);
+  addGrid(3, 3);
+  regions.push(
+    { x: 0, y: 0, width, height: height / 2 },
+    { x: 0, y: height / 2, width, height: height / 2 },
+    { x: 0, y: 0, width: width / 2, height },
+    { x: width / 2, y: 0, width: width / 2, height },
+  );
+  return regions;
+}
+
+function cropToCanvas(source: ImageBitmap, region: { x: number; y: number; width: number; height: number }) {
+  const canvas = document.createElement("canvas");
+  const scale = Math.min(3, Math.max(1, 1800 / Math.max(region.width, region.height)));
+  canvas.width = Math.round(region.width * scale);
+  canvas.height = Math.round(region.height * scale);
+  const context = canvas.getContext("2d");
+  if (!context) return undefined;
+  context.imageSmoothingEnabled = false;
+  context.drawImage(source, region.x, region.y, region.width, region.height, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
 async function detectBarcodeFromFile(file: File) {
   const detectorClass = (window as typeof window & { BarcodeDetector?: BarcodeDetectorConstructor }).BarcodeDetector;
   if (!detectorClass) return { supported: false, values: [] as string[] };
   const bitmap = await createImageBitmap(file);
   try {
     const detector = new detectorClass({ formats: barcodeFormats });
-    const results = await detector.detect(bitmap);
-    return { supported: true, values: results.map((result) => result.rawValue).filter(Boolean) };
+    const values = new Set<string>();
+    for (const region of barcodeScanRegions(bitmap.width, bitmap.height)) {
+      const source = region.x === 0 && region.y === 0 && region.width === bitmap.width && region.height === bitmap.height
+        ? bitmap
+        : cropToCanvas(bitmap, region);
+      if (!source) continue;
+      const results = await detector.detect(source);
+      results.map((result) => result.rawValue).filter(Boolean).forEach((value) => values.add(value));
+      if (values.size > 0) break;
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    }
+    return { supported: true, values: Array.from(values) };
   } finally {
     bitmap.close();
   }
