@@ -66,8 +66,13 @@ function App() {
     });
   }, [regionStores, regionItems, photos, storeSort]);
   const visibleRegionStores = useMemo(() => sortedRegionStores.filter((store) => {
-    if (!`${store.storeName} ${store.storeAddress}`.includes(query)) return false;
     const ownItems = regionItems.filter((item) => item.storeId === store.id);
+    const searchText = [
+      store.storeName,
+      store.storeAddress,
+      ...ownItems.flatMap((item) => [item.productName, item.barcode]),
+    ].join(" ");
+    if (!searchText.includes(query)) return false;
     const ownPhotos = photos.filter((photo) => photo.storeId === store.id);
     const ownStats = summarize(ownItems, ownPhotos);
     if (filter === "미완료" && ownStats.completed >= ownStats.total) return false;
