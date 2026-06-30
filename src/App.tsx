@@ -283,13 +283,22 @@ function App() {
     else if (view === "backup") setView(regions.length ? "regions" : "upload");
     else if (view === "regions") setView("upload");
   };
+  const screenTitle =
+    view === "regions" ? "지역리스트"
+    : view === "workspace" ? "업체 리스트"
+    : view === "store" ? "업체정보"
+    : view === "items" ? "물품리스트"
+    : view === "item" ? "가격정보"
+    : view === "validation" ? "검증"
+    : view === "backup" ? "백업/복원"
+    : "국군복지단 가격조사";
 
   return (
     <div className="app">
       <header className={`topbar ${menuOpen ? "menu-open" : ""}`}>
         <div className="top-main">
           <button className="top-back icon-button" onClick={goBack} disabled={!canGoBack} aria-label="뒤로가기">←</button>
-          <button className="brand" onClick={() => setView(regions.length ? "regions" : "upload")}>국군복지단 가격조사</button>
+          <button className="brand" onClick={() => setView(regions.length ? "regions" : "upload")}>{screenTitle}</button>
           <span className="current">{currentRegion ? `현재 지역: ${currentRegion}` : "지역 미선택"}</span>
           <button className="top-toggle icon-button" onClick={() => setMenuOpen((value) => !value)} aria-expanded={menuOpen} aria-label="메뉴 열기">
             <Menu size={20} />
@@ -319,9 +328,6 @@ function App() {
 
       {view === "regions" && (
         <main className="page">
-          <div className="page-head">
-            <h1>지역 선택</h1>
-          </div>
           <SearchBox value={query} onChange={setQuery} placeholder="지역명 검색" />
           {currentRegion && regions.some((region) => region.name === currentRegion) && (
             <div className="recent-region">
@@ -353,10 +359,6 @@ function App() {
 
       {view === "workspace" && currentRegion && (
         <main className="page">
-          <div className="workspace-title">
-            <h1>{currentRegion} 업체 리스트</h1>
-            <button className="tool-toggle icon-button" onClick={() => setSummaryOpen(true)} aria-label="현황 보기"><InfoIcon size={18} /></button>
-          </div>
           <div className="sticky-search workspace-search">
             <SearchBox value={query} onChange={setQuery} placeholder="마트명 / 업체명 / 주소 / 품목명 / 바코드" />
             <button className="tool-toggle" onClick={() => setWorkspaceToolsOpen((value) => !value)} aria-expanded={workspaceToolsOpen}>
@@ -433,7 +435,6 @@ function App() {
 
       {view === "items" && selectedStore && (
         <main className="page">
-          <h1>{selectedStore.storeName}</h1>
           <div className="sticky-search item-search">
             <SearchBox value={query} onChange={setQuery} placeholder="품목명 / 바코드 / 순번 검색" />
             <button className="tool-toggle icon-button" onClick={() => setSummaryOpen(true)} aria-label="현황 보기"><InfoIcon size={18} /></button>
