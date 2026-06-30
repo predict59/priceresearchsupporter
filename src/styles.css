@@ -237,6 +237,23 @@ textarea { min-height: 110px; resize: vertical; }
   cursor: pointer;
 }
 .photo-button input { display: none; }
+.photo-picker {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+.photo-picker > span {
+  font-weight: 800;
+  color: #334155;
+}
+.photo-picker > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.photo-picker .photo-button {
+  margin: 0;
+}
 .photo-slot {
   border: 1px solid #dbe1e5;
   border-radius: 8px;
@@ -438,5 +455,6 @@ textarea { min-height: 110px; resize: vertical; }
   .bottom-bar button { flex: 1 1 120px; }
   .card-actions { grid-template-columns: 1fr; }
   .photo-actions { grid-template-columns: 1fr; }
+  .photo-picker > div { grid-template-columns: 1fr 1fr; }
   .save-fab { right: 12px; bottom: 14px; }
 }

@@ -520,7 +520,17 @@ function Contacts({ items }: { items: SurveyItem[] }) {
 }
 
 function PhotoInput({ id, label, onFile }: { id?: string; label: string; onFile: (file: File) => void | Promise<void> }) {
-  return <label className="photo-button" htmlFor={id}><Camera size={18} />{label}<input id={id} type="file" accept="image/*" capture="environment" onChange={(event) => event.target.files?.[0] && onFile(event.target.files[0])} /></label>;
+  const pickId = `${id ?? uid("photo_pick")}-pick`;
+  const cameraId = `${id ?? uid("photo_camera")}-camera`;
+  return (
+    <div className="photo-picker">
+      <span>{label}</span>
+      <div>
+        <label className="photo-button" htmlFor={cameraId}><Camera size={18} />촬영<input id={cameraId} type="file" accept="image/*" capture="environment" onChange={(event) => event.target.files?.[0] && onFile(event.target.files[0])} /></label>
+        <label className="photo-button" htmlFor={pickId}><Upload size={18} />선택<input id={pickId} type="file" accept="image/*" onChange={(event) => event.target.files?.[0] && onFile(event.target.files[0])} /></label>
+      </div>
+    </div>
+  );
 }
 
 function ItemEditor({ item, photos, onBack, onPhoto, onDeletePhoto, onSave }: { item: SurveyItem; photos: SurveyPhoto[]; storeItems: SurveyItem[]; onBack: () => void; onMove: (id: string) => void; onPhoto: (item: SurveyItem, type: PhotoType, file: File) => Promise<void>; onDeletePhoto: (photo: SurveyPhoto) => Promise<void>; onSave: (item: SurveyItem) => void }) {
@@ -536,7 +546,7 @@ function ItemEditor({ item, photos, onBack, onPhoto, onDeletePhoto, onSave }: { 
   };
   const nextBlank = () => {
     const target = !itemPhotos.display ? "photo-product-display" : !itemPhotos.info ? "photo-product-info" : !itemPhotos.pos ? "photo-pos-receipt" : "";
-    if (target) document.getElementById(target)?.click();
+    if (target) document.getElementById(`${target}-slot`)?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
   const upload = async (type: PhotoType, file: File, label: string) => {
     await onPhoto(draft, type, file);
@@ -555,7 +565,7 @@ function ItemEditor({ item, photos, onBack, onPhoto, onDeletePhoto, onSave }: { 
 
 function PhotoSlot({ id, label, photo, onFile, onDelete }: { id: string; label: string; photo?: SurveyPhoto; onFile: (file: File) => void | Promise<void>; onDelete: (photo: SurveyPhoto) => void | Promise<void> }) {
   return (
-    <div className={`photo-slot ${photo ? "uploaded" : ""}`}>
+    <div id={`${id}-slot`} className={`photo-slot ${photo ? "uploaded" : ""}`}>
       <div>
         <strong>{label}</strong>
         <span>{photo ? "업로드됨" : "미업로드"}</span>
