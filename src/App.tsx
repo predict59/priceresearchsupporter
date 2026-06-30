@@ -72,7 +72,7 @@ function App() {
     const searchText = [
       store.storeName,
       store.storeAddress,
-      ...ownItems.flatMap((item) => [item.productName, item.barcode]),
+      ...ownItems.flatMap((item) => [item.itemNo, item.productName, item.barcode]),
     ].join(" ");
     if (!searchText.includes(storeQuery)) return false;
     const ownPhotos = photos.filter((photo) => photo.storeId === store.id);

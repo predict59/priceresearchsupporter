@@ -1,6 +1,6 @@
 import JSZip from "jszip";
 import * as XLSX from "xlsx";
-import { downloadBlob, photoCaseOf, safeFilePart } from "./logic";
+import { downloadBlob, safeFilePart } from "./logic";
 import type { AppSettings, BackupPayload, SurveyItem, SurveyPhoto, SurveyStore } from "./types";
 
 const stamp = () => new Date().toISOString().slice(0, 10).replaceAll("-", "");
@@ -81,7 +81,7 @@ export async function exportRegionExcel(region: string, items: SurveyItem[]) {
     item.abnormalStatus === "미진열" ? "O" : item.abnormalStatus ? "-" : "",
     item.abnormalDisplay === "O" ? "O" : "",
     item.memo,
-    item.surveyDate,
+    item.status === "미조사" ? "" : item.surveyDate,
   ]);
   const ws = XLSX.utils.aoa_to_sheet([group, headers, ...rows]);
   ws["!merges"] = [
@@ -105,14 +105,11 @@ export async function exportRegionZip(region: string, stores: SurveyStore[], ite
     const display = photoOf(photos, "PRODUCT_DISPLAY", item);
     const info = photoOf(photos, "PRODUCT_INFO_BARCODE", item);
     const pos = photoOf(photos, "POS_RECEIPT", item);
-    const photoCase = photoCaseOf(item);
-    if (front && photoCase !== "MISSING") zip.file(`${item.itemNo}.1.jpg`, front.blob);
-    if (photoCase === "POS_ONLY") {
-      if (pos) zip.file(`${item.itemNo}.2.jpg`, pos.blob);
-    } else if (photoCase === "NORMAL") {
-      if (display) zip.file(`${item.itemNo}.2.jpg`, display.blob);
-      if (info) zip.file(`${item.itemNo}.3.jpg`, info.blob);
-    }
+    const name = safeFilePart(item.productName || item.itemNo);
+    if (front) zip.file(`${name}.1.jpg`, front.blob);
+    if (display) zip.file(`${name}.2.jpg`, display.blob);
+    if (info) zip.file(`${name}.3.jpg`, info.blob);
+    if (pos) zip.file(`${name}.4.jpg`, pos.blob);
   });
   await downloadBlob(await zip.generateAsync({ type: "blob", mimeType: "application/zip" }), `price_photos_${safeFilePart(region)}_${stamp()}.zip`);
 }
