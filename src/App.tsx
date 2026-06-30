@@ -23,6 +23,24 @@ const num = (value: string) => {
   return digits === "" ? null : Number(digits);
 };
 const EXCEL_ACCEPT = ".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream";
+type BarcodeDetectorConstructor = new (options?: { formats?: string[] }) => {
+  detect: (source: ImageBitmapSource) => Promise<Array<{ rawValue: string }>>;
+};
+const barcodeFormats = ["ean_13", "ean_8", "code_128", "code_39", "code_93", "upc_a", "upc_e", "itf"];
+const onlyDigits = (value: string) => value.replace(/\D/g, "");
+
+async function detectBarcodeFromFile(file: File) {
+  const detectorClass = (window as typeof window & { BarcodeDetector?: BarcodeDetectorConstructor }).BarcodeDetector;
+  if (!detectorClass) return { supported: false, values: [] as string[] };
+  const bitmap = await createImageBitmap(file);
+  try {
+    const detector = new detectorClass({ formats: barcodeFormats });
+    const results = await detector.detect(bitmap);
+    return { supported: true, values: results.map((result) => result.rawValue).filter(Boolean) };
+  } finally {
+    bitmap.close();
+  }
+}
 
 function App() {
   const [view, setView] = useState<View>("upload");
@@ -829,7 +847,39 @@ function ItemEditor({ item, storeItems, photos, onPhoto, onDeletePhoto, onSave, 
   };
   const upload = async (type: PhotoType, file: File, label: string) => {
     await onPhoto(draft, type, file);
-    setPhotoMessage(`${label} 업로드 완료`);
+    if (type !== "PRODUCT_INFO_BARCODE") {
+      setPhotoMessage(`${label} 업로드 완료`);
+      return;
+    }
+
+    try {
+      const detected = await detectBarcodeFromFile(file);
+      if (!detected.supported) {
+        setPhotoMessage(`${label} 업로드 완료 · 이 브라우저는 바코드 자동인식을 지원하지 않습니다.`);
+        return;
+      }
+      const expected = onlyDigits(draft.barcode);
+      const detectedValues = detected.values.map(onlyDigits).filter(Boolean);
+      if (detectedValues.length === 0) {
+        setPhotoMessage(`${label} 업로드 완료 · 바코드를 인식하지 못했습니다.`);
+        return;
+      }
+      const matched = expected ? detectedValues.includes(expected) : false;
+      const detectedText = detectedValues.join(", ");
+      if (expected && matched) {
+        update({ barcodeMatch: "O" });
+        setPhotoMessage(`${label} 업로드 완료 · 바코드 일치 ${expected}`);
+      } else if (expected) {
+        update({ barcodeMatch: "X" });
+        setPhotoMessage(`${label} 업로드 완료 · 바코드 불일치 ${detectedText}`);
+        alert(`바코드가 다릅니다.\n\n조사표 바코드: ${expected}\n촬영 바코드: ${detectedText}\n\n바코드일치 X로 표시했습니다.`);
+      } else {
+        setPhotoMessage(`${label} 업로드 완료 · 바코드 인식 ${detectedText}`);
+      }
+    } catch (error) {
+      console.error(error);
+      setPhotoMessage(`${label} 업로드 완료 · 바코드 자동인식 실패`);
+    }
   };
   const nextTodoId = () => {
     const currentIndex = storeItems.findIndex((candidate) => candidate.id === draft.id);
