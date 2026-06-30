@@ -213,7 +213,25 @@ function App() {
     setView("regions");
   }
 
-  const regionSummary = (region: string) => summarize(items.filter((item) => item.region === region), region === currentRegion ? photos : []);
+  const regionSummary = (region: string) => {
+    const regionStoresForSummary = stores.filter((store) => store.region === region);
+    const regionItemsForSummary = items.filter((item) => item.region === region);
+    const completed = regionStoresForSummary.filter((store) => {
+      const own = regionItemsForSummary.filter((item) => item.storeId === store.id);
+      return own.length > 0 && own.every((item) => item.status === "완료");
+    }).length;
+    const inProgress = regionStoresForSummary.filter((store) => {
+      const own = regionItemsForSummary.filter((item) => item.storeId === store.id);
+      return own.some((item) => item.status === "완료" || item.status === "조사중") && !(own.length > 0 && own.every((item) => item.status === "완료"));
+    }).length;
+    return {
+      total: regionStoresForSummary.length,
+      completed,
+      inProgress,
+      notStarted: Math.max(0, regionStoresForSummary.length - completed - inProgress),
+      photoMissing: summarize(regionItemsForSummary, region === currentRegion ? photos : []).photoMissing,
+    };
+  };
   const canGoBack = view !== "upload" && !(view === "regions" && regions.length > 0);
   const goBack = () => {
     setMenuOpen(false);
@@ -365,11 +383,11 @@ function App() {
           )}
           <div className="list">
             {storeItems.filter((item) => `${item.itemNo} ${item.productName} ${item.barcode}`.includes(query)).filter((item) => filter === "전체" || (filter === "사진누락" ? requiredPhotoLabels(item, photos.filter((photo) => photo.storeId === item.storeId)).length > 0 : item.status === filter)).map((item) => (
-              <article className="card compact" key={item.id}>
-                <h2 className="item-title"><span className="item-code">{item.itemNo}</span><span>{item.productName}</span></h2>
+              <article className={`card compact item-card ${selectedItemId === item.id ? "focused" : ""}`} key={item.id}>
+                <div className="item-card-head"><h2 className="item-title"><span className="item-code">{item.itemNo}</span><span>{item.productName}</span></h2><Badge text={item.status} /></div>
                 <p>바코드: {item.barcode || "-"} · 기준가격: {item.basePrice?.toLocaleString() ?? "-"}원</p>
                 <p>조사가격: {item.normalPrice?.toLocaleString() ?? "-"}원</p>
-                <Badge text={item.status} /><button className="primary" onClick={() => { setSelectedItemId(item.id); setView("item"); }}>조사 시작/수정</button>
+                <button className="primary" onClick={() => { setSelectedItemId(item.id); setView("item"); }}>입력</button>
               </article>
             ))}
           </div>
@@ -377,7 +395,7 @@ function App() {
       )}
 
       {view === "item" && selectedItem && (
-        <ItemEditor item={selectedItem} photos={photos.filter((photo) => photo.storeId === selectedItem.storeId)} onPhoto={saveItemPhoto} onDeletePhoto={removeItemPhoto} onSave={saveItem} />
+        <ItemEditor item={selectedItem} storeItems={storeItems} photos={photos.filter((photo) => photo.storeId === selectedItem.storeId)} onPhoto={saveItemPhoto} onDeletePhoto={removeItemPhoto} onSave={saveItem} onList={(focusId) => { if (focusId) setSelectedItemId(focusId); setView("items"); }} onMove={(id) => setSelectedItemId(id)} />
       )}
 
       {view === "validation" && (
@@ -595,7 +613,7 @@ function PhotoInput({ id, label, onFile }: { id?: string; label: string; onFile:
   );
 }
 
-function ItemEditor({ item, photos, onPhoto, onDeletePhoto, onSave }: { item: SurveyItem; photos: SurveyPhoto[]; onPhoto: (item: SurveyItem, type: PhotoType, file: File) => Promise<void>; onDeletePhoto: (photo: SurveyPhoto) => Promise<void>; onSave: (item: SurveyItem) => Promise<boolean> }) {
+function ItemEditor({ item, storeItems, photos, onPhoto, onDeletePhoto, onSave, onList, onMove }: { item: SurveyItem; storeItems: SurveyItem[]; photos: SurveyPhoto[]; onPhoto: (item: SurveyItem, type: PhotoType, file: File) => Promise<void>; onDeletePhoto: (photo: SurveyPhoto) => Promise<void>; onSave: (item: SurveyItem) => Promise<boolean>; onList: (focusId?: string) => void; onMove: (id: string) => void }) {
   const [draft, setDraft] = useState(item);
   const [photoMessage, setPhotoMessage] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
@@ -621,6 +639,11 @@ function ItemEditor({ item, photos, onPhoto, onDeletePhoto, onSave }: { item: Su
     await onPhoto(draft, type, file);
     setPhotoMessage(`${label} 업로드 완료`);
   };
+  const nextTodoId = () => {
+    const currentIndex = storeItems.findIndex((candidate) => candidate.id === draft.id);
+    const ordered = [...storeItems.slice(currentIndex + 1), ...storeItems.slice(0, Math.max(0, currentIndex))];
+    return (ordered.find((candidate) => candidate.status !== "완료") ?? ordered[0])?.id;
+  };
   const handleSave = async () => {
     setIsSaving(true);
     setSaveMessage("저장 중...");
@@ -640,6 +663,38 @@ function ItemEditor({ item, photos, onPhoto, onDeletePhoto, onSave }: { item: Su
       setIsSaving(false);
     }
   };
+  const saveAndList = async () => {
+    setIsSaving(true);
+    setSaveMessage("저장 중...");
+    try {
+      const saved = await onSave(draft);
+      if (saved) onList(nextTodoId());
+      else setSaveMessage("저장이 취소되었습니다.");
+    } catch (error) {
+      console.error(error);
+      setSaveMessage("저장 실패: 다시 눌러주세요.");
+      alert("저장에 실패했습니다. 다시 시도해 주세요.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+  const saveAndNext = async () => {
+    setIsSaving(true);
+    setSaveMessage("저장 중...");
+    try {
+      const saved = await onSave(draft);
+      const nextId = nextTodoId();
+      if (saved && nextId) onMove(nextId);
+      else if (saved) onList();
+      else setSaveMessage("저장이 취소되었습니다.");
+    } catch (error) {
+      console.error(error);
+      setSaveMessage("저장 실패: 다시 눌러주세요.");
+      alert("저장에 실패했습니다. 다시 시도해 주세요.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
   return <main className="page item-page"><section className="item-hero compact-hero"><div><h1 className="item-title"><span className="item-code">{draft.itemNo}</span><span>{draft.productName}</span></h1><Badge text={draft.status} /></div></section>
     <ItemContact item={draft} />
     <details className="panel" open><summary>① 업체 제시정보</summary><Info item={draft} /></details>
@@ -649,7 +704,11 @@ function ItemEditor({ item, photos, onPhoto, onDeletePhoto, onSave }: { item: Su
     <section className="panel"><h2>⑤ 가격 판단</h2><Money label="정상가" value={draft.normalPrice} onChange={(value) => update({ normalPrice: num(value) })} /><Choice label="할인 여부" value={draft.hasDiscount === null ? "" : draft.hasDiscount ? "할인 있음" : "할인 없음"} values={["할인 없음", "할인 있음"]} onChange={(value) => update({ hasDiscount: value === "할인 있음" })} /><Money label="할인가" value={draft.discountPrice} onChange={(value) => update({ discountPrice: num(value) })} /><label>할인 시작일<input type="date" value={draft.discountStartDate} onChange={(event) => update({ discountStartDate: event.target.value })} /></label><label>할인 종료일<input type="date" value={draft.discountEndDate} onChange={(event) => update({ discountEndDate: event.target.value })} /></label><DiscountPeriod value={draft.discountType} oral={draft.discountOral ?? draft.discountType.includes("구두")} onChange={(discountType, discountOral) => update({ discountType, discountOral })} />{draft.basePrice !== null && draft.normalPrice !== null && <p className="notice">참고: 정상가가 기준가격보다 {draft.normalPrice < draft.basePrice ? "낮습니다" : draft.normalPrice > draft.basePrice ? "높습니다" : "같습니다"}.</p>}</section>
     <section className="panel"><h2>⑥ 비정상 진열 / 비고</h2><div className="abnormal-block"><Choice label="비정상진열" value={draft.abnormalDisplay ?? ""} values={["O", "X"]} onChange={(value) => update({ abnormalDisplay: value as SurveyItem["abnormalDisplay"] })} />{draft.abnormalDisplay === "O" && <p className="small-help warn">비정상진열이면 어떤 위치에 어떻게 진열되어 있었는지 아래 비고에 적어주세요.</p>}</div><div className="memo-block"><h3>비고</h3><p className="small-help">자주 쓰는 문구를 누르면 비고에 추가됩니다.</p><div className="chips memo-chips">{["가격표 수기 작성", "POS 확인", "규격 불일치", "바코드 불일치", "장기 할인", "구두 확인", "비정상진열", "미진열", "미판매", "폐점", "품절", "기타"].map((text) => <button key={text} onClick={() => update({ memo: draft.memo ? `${draft.memo} / ${text}` : text })}>{text}</button>)}</div><textarea placeholder="예: 같은 카테고리 매대가 아닌 행사 매대에 단독 진열 / 사진 촬영 불가 / POS 확인" value={draft.memo} onChange={(event) => update({ memo: event.target.value })} /></div></section>
     {saveMessage && <div className={`save-toast ${saveMessage.includes("실패") ? "danger-toast" : ""}`}>{saveMessage}</div>}
-    <button type="button" className="save-fab primary" onClick={handleSave} disabled={isSaving} aria-label="저장"><CheckCircle2 size={22} />{isSaving ? "저장 중" : "저장"}</button>
+    <div className="item-action-fab">
+      <button type="button" onClick={saveAndList} disabled={isSaving}>목록</button>
+      <button type="button" className="primary" onClick={handleSave} disabled={isSaving} aria-label="저장"><CheckCircle2 size={19} />{isSaving ? "저장 중" : "저장"}</button>
+      <button type="button" onClick={saveAndNext} disabled={isSaving}>다음</button>
+    </div>
   </main>;
 }
 

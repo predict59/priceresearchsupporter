@@ -72,6 +72,20 @@ h2 { font-size: 18px; margin: 0 0 10px; letter-spacing: 0; }
   align-items: center;
   gap: 8px;
 }
+.item-card-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+}
+.item-card-head .badge {
+  justify-self: end;
+  white-space: nowrap;
+}
+.item-card.focused {
+  border-color: #0f766e;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, .12);
+}
 .item-code {
   display: inline-flex;
   align-items: center;
@@ -480,6 +494,26 @@ textarea { min-height: 110px; resize: vertical; }
   border-radius: 999px;
   box-shadow: 0 12px 28px rgba(15, 23, 42, .22);
 }
+.item-action-fab {
+  position: fixed;
+  right: 12px;
+  bottom: 14px;
+  z-index: 25;
+  display: grid;
+  grid-template-columns: auto auto auto;
+  gap: 7px;
+  padding: 7px;
+  border: 1px solid #dbe1e5;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .96);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, .22);
+}
+.item-action-fab button {
+  min-height: 46px;
+  border-radius: 999px;
+  padding: 0 14px;
+  font-weight: 900;
+}
 .save-toast {
   position: fixed;
   right: 16px;
@@ -670,4 +704,6 @@ textarea { min-height: 110px; resize: vertical; }
   .photo-picker > div { grid-template-columns: 1fr 1fr; }
   .save-fab { right: 12px; bottom: 14px; }
   .save-toast { right: 12px; bottom: 78px; }
+  .item-action-fab { left: 12px; right: 12px; grid-template-columns: 1fr 1.2fr 1fr; }
+  .item-action-fab button { padding: 0 10px; }
 }
