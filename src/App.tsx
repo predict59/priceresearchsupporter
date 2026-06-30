@@ -107,6 +107,11 @@ function App() {
     }
   }, [view]);
 
+  useEffect(() => {
+    if (view !== "workspace" || !selectedStoreId) return;
+    window.setTimeout(() => document.getElementById(`store-card-${selectedStoreId}`)?.scrollIntoView({ block: "center", behavior: "smooth" }), 80);
+  }, [view, selectedStoreId, visibleRegionStores.length]);
+
   async function updateSettings(patch: Partial<AppSettings>) {
     const next = { ...settings, ...patch };
     setSettingsState(next);
@@ -491,7 +496,7 @@ function App() {
       )}
 
       {view === "item" && selectedItem && (
-        <ItemEditor item={selectedItem} storeItems={storeItems} photos={photos.filter((photo) => photo.storeId === selectedItem.storeId)} onPhoto={saveItemPhoto} onDeletePhoto={removeItemPhoto} onSave={saveItem} onList={(focusId) => { if (focusId) setSelectedItemId(focusId); setView("items"); }} onMove={(id) => setSelectedItemId(id)} />
+        <ItemEditor item={selectedItem} storeItems={storeItems} photos={photos.filter((photo) => photo.storeId === selectedItem.storeId)} onPhoto={saveItemPhoto} onDeletePhoto={removeItemPhoto} onSave={saveItem} onList={(focusId) => { if (focusId) setSelectedItemId(focusId); setView("items"); }} onStoreList={() => { setFilter("전체"); setSelectedStoreId(selectedItem.storeId); setView("workspace"); }} onMove={(id) => setSelectedItemId(id)} />
       )}
 
       {view === "validation" && (
@@ -639,7 +644,7 @@ function StoreCard({
   const percent = stats.total ? Math.round((stats.completed / stats.total) * 100) : 0;
   if (orderEditing) {
     return (
-      <article className={`visit-order-row ${focused ? "focused" : ""} ${dragging ? "dragging" : ""}`} draggable onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}>
+      <article id={`store-card-${store.id}`} className={`visit-order-row ${focused ? "focused" : ""} ${dragging ? "dragging" : ""}`} draggable onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}>
         <span className="drag-handle" aria-hidden="true">☰</span>
         <input aria-label={`${store.storeName} 방문순서`} inputMode="numeric" value={store.visitOrder ?? ""} placeholder="-" onChange={(event) => onOrderChange(event.target.value)} />
         <div className="visit-order-name">
@@ -655,7 +660,7 @@ function StoreCard({
   }
 
   return (
-    <article className={`card store-card ${focused ? "focused" : ""}`}>
+    <article id={`store-card-${store.id}`} className={`card store-card ${focused ? "focused" : ""}`}>
       <div className="card-head">
         <div>
           <h2>{store.storeName}</h2>
@@ -777,7 +782,7 @@ function PhotoInput({ id, label, onFile }: { id?: string; label: string; onFile:
   );
 }
 
-function ItemEditor({ item, storeItems, photos, onPhoto, onDeletePhoto, onSave, onList, onMove }: { item: SurveyItem; storeItems: SurveyItem[]; photos: SurveyPhoto[]; onPhoto: (item: SurveyItem, type: PhotoType, file: File) => Promise<void>; onDeletePhoto: (photo: SurveyPhoto) => Promise<void>; onSave: (item: SurveyItem) => Promise<boolean>; onList: (focusId?: string) => void; onMove: (id: string) => void }) {
+function ItemEditor({ item, storeItems, photos, onPhoto, onDeletePhoto, onSave, onList, onStoreList, onMove }: { item: SurveyItem; storeItems: SurveyItem[]; photos: SurveyPhoto[]; onPhoto: (item: SurveyItem, type: PhotoType, file: File) => Promise<void>; onDeletePhoto: (photo: SurveyPhoto) => Promise<void>; onSave: (item: SurveyItem) => Promise<boolean>; onList: (focusId?: string) => void; onStoreList: () => void; onMove: (id: string) => void }) {
   const [draft, setDraft] = useState(item);
   const [photoMessage, setPhotoMessage] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
@@ -802,7 +807,7 @@ function ItemEditor({ item, storeItems, photos, onPhoto, onDeletePhoto, onSave, 
   const nextTodoId = () => {
     const currentIndex = storeItems.findIndex((candidate) => candidate.id === draft.id);
     const ordered = [...storeItems.slice(currentIndex + 1), ...storeItems.slice(0, Math.max(0, currentIndex))];
-    return ordered.find((candidate) => candidate.status !== "완료")?.id;
+    return ordered.find((candidate) => candidate.id !== draft.id && candidate.status !== "완료")?.id;
   };
   const nextSequentialId = () => {
     const currentIndex = storeItems.findIndex((candidate) => candidate.id === draft.id);
@@ -819,8 +824,8 @@ function ItemEditor({ item, storeItems, photos, onPhoto, onDeletePhoto, onSave, 
         const nextId = nextTodoId();
         if (nextId) {
           if (confirm("저장되었습니다. 다음 미등록 상품으로 이동할까요?")) onMove(nextId);
-        } else if (confirm("전 품목 입력완료입니다. 목록으로 돌아갈까요?")) {
-          onList();
+        } else if (confirm("전 품목 입력완료입니다. 업체리스트로 돌아갈까요?")) {
+          onStoreList();
         }
       } else {
         setSaveMessage("저장이 취소되었습니다.");
