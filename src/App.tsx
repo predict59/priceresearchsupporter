@@ -450,7 +450,18 @@ function FilterBar({ filter, setFilter }: { filter: Filter; setFilter: (filter: 
 }
 
 function Stats({ stats }: { stats: RegionStats }) {
-  return <div className="stats"><span>전체 {stats.total.toLocaleString()}개</span><span>완료 {stats.completed.toLocaleString()}개</span><span>조사중 {stats.inProgress.toLocaleString()}개</span><span>미조사 {stats.notStarted.toLocaleString()}개</span><span className="missing">사진누락 {stats.photoMissing.toLocaleString()}개</span></div>;
+  return (
+    <div className="stats">
+      <div className="stats-line">
+        <strong>전체 {stats.total.toLocaleString()}개</strong>
+        <span>완료 {stats.completed.toLocaleString()}</span>
+        <span>조사중 {stats.inProgress.toLocaleString()}</span>
+        <span>미조사 {stats.notStarted.toLocaleString()}</span>
+      </div>
+      <div className="stats-progress"><span style={{ width: `${stats.total ? Math.round((stats.completed / stats.total) * 100) : 0}%` }} /></div>
+      <div className="stats-missing">사진누락 {stats.photoMissing.toLocaleString()}개</div>
+    </div>
+  );
 }
 
 function Badge({ text }: { text: string }) {

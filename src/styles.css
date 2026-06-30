@@ -148,8 +148,55 @@ textarea { min-height: 110px; resize: vertical; }
   justify-content: space-between;
   margin-bottom: 8px;
 }
-.stats { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 12px; }
-.stats span, .badge {
+.stats {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 14px;
+}
+.stats-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: #52616b;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.stats-line::-webkit-scrollbar { display: none; }
+.stats-line strong {
+  color: #17202a;
+  font-size: 14px;
+}
+.stats-line span::before {
+  content: "·";
+  margin-right: 7px;
+  color: #94a3b8;
+}
+.stats-progress {
+  height: 7px;
+  border-radius: 999px;
+  background: #e8edf1;
+  overflow: hidden;
+}
+.stats-progress span {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  background: #0f766e;
+}
+.stats-missing {
+  justify-self: start;
+  border-radius: 999px;
+  padding: 4px 9px;
+  background: #fff1f2;
+  color: #b91c1c;
+  font-size: 13px;
+  font-weight: 900;
+}
+.badge {
   border-radius: 999px;
   padding: 5px 9px;
   background: #eef2f4;
@@ -157,7 +204,7 @@ textarea { min-height: 110px; resize: vertical; }
   font-size: 14px;
   font-weight: 700;
 }
-.stats .missing, .warn { color: #b91c1c; }
+.warn { color: #b91c1c; }
 .ok { color: #15803d; font-weight: 800; }
 .notice { background: #ecfeff; border-left: 4px solid #0891b2; padding: 10px; }
 .muted { color: #52616b; font-weight: 700; }
