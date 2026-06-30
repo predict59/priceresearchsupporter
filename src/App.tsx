@@ -297,10 +297,10 @@ function App() {
         <main className="page">
           <div className="workspace-title">
             <h1>{currentRegion} 리스트</h1>
-          </div>
-          <div className="sticky-search">
-            <SearchBox value={query} onChange={setQuery} placeholder="마트명 / 업체명 / 주소 / 품목명 / 바코드" />
             <button className="tool-toggle icon-button" onClick={() => setSummaryOpen(true)} aria-label="현황 보기"><InfoIcon size={18} /></button>
+          </div>
+          <div className="sticky-search workspace-search">
+            <SearchBox value={query} onChange={setQuery} placeholder="마트명 / 업체명 / 주소 / 품목명 / 바코드" />
             <button className="tool-toggle" onClick={() => setWorkspaceToolsOpen((value) => !value)} aria-expanded={workspaceToolsOpen}>
               <SlidersHorizontal size={18} /> 필터 {workspaceToolsOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </button>
@@ -326,7 +326,7 @@ function App() {
               const ownStats = summarize(ownItems, ownPhotos);
               if (filter !== "전체" && filter !== "사진누락" && !ownItems.some((item) => item.status === filter)) return null;
               if (filter === "사진누락" && ownStats.photoMissing === 0) return null;
-              return <StoreCard key={store.id} store={store} stats={ownStats} onOpen={() => openStore(store)} onContacts={() => setContactStoreId(store.id)} />;
+              return <StoreCard key={store.id} store={store} stats={ownStats} items={ownItems} onOpen={() => openStore(store)} onContacts={() => setContactStoreId(store.id)} />;
             })}
           </div>
         </main>
@@ -343,7 +343,7 @@ function App() {
             <p className={selectedStore.frontPhotoId ? "ok" : "warn"}>촬영 상태: {selectedStore.frontPhotoId ? "촬영완료" : "미촬영"}</p>
           </section>
           <Contacts items={storeItems} />
-          <button className="primary sticky-lite" onClick={() => setView("items")}>품목 조사 시작</button>
+          <button className="primary sticky-lite" onClick={() => setView("items")}>조사 입력</button>
         </main>
       )}
 
@@ -468,7 +468,10 @@ function Badge({ text }: { text: string }) {
   return <span className={`badge badge-${text}`}>{text}</span>;
 }
 
-function StoreCard({ store, stats, onOpen, onContacts }: { store: SurveyStore; stats: RegionStats; onOpen: () => void; onContacts: () => void }) {
+function StoreCard({ store, stats, items, onOpen, onContacts }: { store: SurveyStore; stats: RegionStats; items: SurveyItem[]; onOpen: () => void; onContacts: () => void }) {
+  const completed = items.filter((item) => item.status === "완료");
+  const latestSurveyDate = completed.map((item) => item.surveyDate).filter(Boolean).sort().at(-1) ?? "-";
+  const percent = stats.total ? Math.round((stats.completed / stats.total) * 100) : 0;
   return (
     <article className="card store-card">
       <div className="card-head">
@@ -483,12 +486,21 @@ function StoreCard({ store, stats, onOpen, onContacts }: { store: SurveyStore; s
           </div>
         </details>
       </div>
-      <Stats stats={stats} />
-      <div className="progress-line"><span style={{ width: `${stats.total ? Math.round((stats.completed / stats.total) * 100) : 0}%` }} /></div>
-      <p>업체사진: {store.frontPhotoId ? "촬영완료" : "미촬영"} · 조사일: {store.surveyDate}</p>
+      <div className="store-progress">
+        <div className="store-progress-head">
+          <strong>완료 {stats.completed.toLocaleString()} / 전체 {stats.total.toLocaleString()}</strong>
+          <span>미조사 {(stats.total - stats.completed).toLocaleString()}</span>
+        </div>
+        <div className="progress-line"><span style={{ width: `${percent}%` }} /></div>
+      </div>
+      <div className="store-meta">
+        <span className={`store-photo-badge ${store.frontPhotoId ? "done" : ""}`}>업체사진 {store.frontPhotoId ? "등록" : "미등록"}</span>
+        <span>조사일: {latestSurveyDate}</span>
+        {stats.photoMissing > 0 && <span className="store-missing">사진누락 {stats.photoMissing.toLocaleString()}개</span>}
+      </div>
       <div className="card-actions">
         <button onClick={onContacts}><Phone size={16} />담당자 정보</button>
-        <button className="primary" onClick={onOpen}>입력 시작/계속</button>
+        <button className="primary" onClick={onOpen}>입력</button>
       </div>
     </article>
   );

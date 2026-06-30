@@ -5,13 +5,18 @@ export function photosForItem(item: SurveyItem, storePhotos: SurveyPhoto[]) {
 }
 
 export function requiredPhotoLabels(item: SurveyItem, photos: SurveyPhoto[]) {
-  const photoCase = item.photoCase || (item.normalDisplay === "X" ? "POS_ONLY" : "NORMAL");
   const hasFront = photos.some((photo) => photo.type === "STORE_FRONT");
+  const missing = productPhotoMissingLabels(item, photos);
+  if (!hasFront) return ["업체사진", ...missing];
+  return missing;
+}
+
+export function productPhotoMissingLabels(item: SurveyItem, photos: SurveyPhoto[]) {
+  const photoCase = item.photoCase || (item.normalDisplay === "X" ? "POS_ONLY" : "NORMAL");
   const hasDisplay = photos.some((photo) => photo.type === "PRODUCT_DISPLAY" && photo.itemId === item.id);
   const hasInfo = photos.some((photo) => photo.type === "PRODUCT_INFO_BARCODE" && photo.itemId === item.id);
   const hasPos = photos.some((photo) => photo.type === "POS_RECEIPT" && photo.itemId === item.id);
   const missing: string[] = [];
-  if (!hasFront) missing.push("업체사진");
   if (photoCase === "MISSING") {
     missing.push("물품 사진 전체 누락");
   } else if (photoCase === "POS_ONLY") {
@@ -37,7 +42,7 @@ export function summarize(items: SurveyItem[], photos: SurveyPhoto[]): RegionSta
     completed: items.filter((item) => item.status === "완료").length,
     inProgress: items.filter((item) => item.status === "조사중").length,
     notStarted: items.filter((item) => item.status === "미조사").length,
-    photoMissing: items.filter((item) => isPhotoMissing(item, photos)).length,
+    photoMissing: items.filter((item) => item.status === "완료" && productPhotoMissingLabels(item, photos).length > 0).length,
   };
 }
 
