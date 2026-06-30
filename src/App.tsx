@@ -1,6 +1,6 @@
 import { Camera, CheckCircle2, ChevronDown, ChevronUp, Download, FileJson, Info as InfoIcon, MapPin, Menu, MoreVertical, Phone, RotateCcw, SlidersHorizontal, Search, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { clearAllData, getItems, getPhotosByRegion, getPhotosByStore, getRegions, getSettings, getStores, importRegionData, now, putItem, putPhoto, putStore, saveParsedData, saveSettings, today, uid } from "./db";
+import { clearAllData, deletePhoto, getItems, getPhotosByRegion, getPhotosByStore, getRegions, getSettings, getStores, importRegionData, now, putItem, putPhoto, putStore, saveParsedData, saveSettings, today, uid } from "./db";
 import { parseContactRows, parseSurveyWorkbook, mergeContacts, rebuildStoresAndRegions } from "./excel";
 import { dataUrlToBlob, exportBackup, exportRegionExcel, exportRegionZip } from "./exporters";
 import { mapSearchAddress, requiredPhotoLabels, summarize } from "./logic";
@@ -35,10 +35,10 @@ function App() {
   const [contactFile, setContactFile] = useState<File | null>(null);
   const [analysis, setAnalysis] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [autoNext, setAutoNext] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
   const [storeSort, setStoreSort] = useState<StoreSort>("주소순");
   const [workspaceToolsOpen, setWorkspaceToolsOpen] = useState(false);
+  const [itemToolsOpen, setItemToolsOpen] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [contactStoreId, setContactStoreId] = useState("");
 
@@ -147,6 +147,7 @@ function App() {
 
   async function saveStorePhoto(file: File) {
     if (!selectedStore) return;
+    if (selectedStore.frontPhotoId) await deletePhoto(selectedStore.frontPhotoId);
     const photo: SurveyPhoto = { id: uid("photo"), region: selectedStore.region, storeId: selectedStore.id, type: "STORE_FRONT", blob: file, originalName: file.name, mimeType: file.type, takenAt: now() };
     await putPhoto(photo);
     await putStore({ ...selectedStore, frontPhotoId: photo.id, status: "진행중", startedAt: selectedStore.startedAt ?? now(), updatedAt: now() });
@@ -154,28 +155,28 @@ function App() {
   }
 
   async function saveItemPhoto(item: SurveyItem, type: PhotoType, file: File) {
+    const oldPhotos = await getPhotosByStore(item.storeId);
+    await Promise.all(oldPhotos.filter((photo) => photo.itemId === item.id && photo.type === type).map((photo) => deletePhoto(photo.id)));
     const photo: SurveyPhoto = { id: uid("photo"), region: item.region, storeId: item.storeId, itemId: item.id, type, blob: file, originalName: file.name, mimeType: file.type, takenAt: now() };
     await putPhoto(photo);
     await refresh(item.region);
   }
 
-  async function saveItem(next: SurveyItem, complete: boolean) {
+  async function removeItemPhoto(photo: SurveyPhoto) {
+    await deletePhoto(photo.id);
+    await refresh(photo.region);
+  }
+
+  async function saveItem(next: SurveyItem) {
     const storePhotos = await getPhotosByStore(next.storeId);
     const missing = requiredPhotoLabels(next, storePhotos);
-    if (complete && missing.length) {
+    if (missing.length) {
       const label = next.normalDisplay === "X" ? "정상진열 X 품목" : next.normalDisplay === "O" ? "정상진열 품목" : "정상진열 여부가 선택되지 않아 기본 사진 기준";
       const ok = confirm(`사진이 부족합니다.\n\n${label}은 아래 사진이 필요합니다.\n- ${missing.join("\n- ")}\n\n그래도 저장하시겠습니까?`);
       if (!ok) return;
     }
-    const saved: SurveyItem = { ...next, status: complete ? "완료" : "조사중", updatedAt: now() };
+    const saved: SurveyItem = { ...next, status: "완료", updatedAt: now() };
     await putItem(saved);
-    if (autoNext && complete) {
-      const list = items.filter((item) => item.storeId === saved.storeId);
-      const index = list.findIndex((item) => item.id === saved.id);
-      const nextItem = list[index + 1];
-      setSelectedItemId(nextItem?.id ?? saved.id);
-      setView(nextItem ? "item" : "items");
-    }
     await refresh(saved.region);
   }
 
@@ -251,6 +252,12 @@ function App() {
             <h1>지역 선택</h1>
           </div>
           <SearchBox value={query} onChange={setQuery} placeholder="지역명 검색" />
+          {currentRegion && regions.some((region) => region.name === currentRegion) && (
+            <div className="recent-region">
+              <span>최근 지역</span>
+              <button onClick={() => chooseRegion(currentRegion)}>{currentRegion}</button>
+            </div>
+          )}
           <div className="grid">
             {regions.filter((region) => region.name.includes(query)).map((region) => {
               const summary = regionSummary(region.name);
@@ -322,7 +329,6 @@ function App() {
             <p>조사 품목: {storeItems.length.toLocaleString()}개</p>
             <PhotoInput label={selectedStore.frontPhotoId ? "업체 전경사진 교체" : "업체 전경사진 촬영/첨부"} onFile={saveStorePhoto} />
             <p className={selectedStore.frontPhotoId ? "ok" : "warn"}>촬영 상태: {selectedStore.frontPhotoId ? "촬영완료" : "미촬영"}</p>
-            <div className="actions">{mapLinks(selectedStore.storeAddress).map(([name, href]) => <a className="button" key={name} href={href} target="_blank"><MapPin size={16} />{name}지도</a>)}</div>
           </section>
           <Contacts items={storeItems} />
           <button className="primary sticky-lite" onClick={() => setView("items")}>품목 조사 시작</button>
@@ -333,9 +339,19 @@ function App() {
         <main className="page">
           <button onClick={() => setView("store")}>← 업체사진</button>
           <h1>{selectedStore.storeName}</h1>
-          <Stats stats={summarize(storeItems, photos.filter((photo) => photo.storeId === selectedStore.id))} />
-          <SearchBox value={query} onChange={setQuery} placeholder="품목명 / 바코드 / 순번 검색" />
-          <FilterBar filter={filter} setFilter={setFilter} />
+          <div className="sticky-search item-search">
+            <SearchBox value={query} onChange={setQuery} placeholder="품목명 / 바코드 / 순번 검색" />
+            <button className="tool-toggle icon-button" onClick={() => setSummaryOpen(true)} aria-label="현황 보기"><InfoIcon size={18} /></button>
+            <button className="tool-toggle" onClick={() => setItemToolsOpen((value) => !value)} aria-expanded={itemToolsOpen}>
+              <SlidersHorizontal size={18} /> 필터 {itemToolsOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+          </div>
+          {itemToolsOpen && (
+            <section className="tool-panel">
+              <Stats stats={summarize(storeItems, photos.filter((photo) => photo.storeId === selectedStore.id))} />
+              <FilterBar filter={filter} setFilter={setFilter} />
+            </section>
+          )}
           <div className="list">
             {storeItems.filter((item) => `${item.itemNo} ${item.productName} ${item.barcode}`.includes(query)).filter((item) => filter === "전체" || (filter === "사진누락" ? requiredPhotoLabels(item, photos.filter((photo) => photo.storeId === item.storeId)).length > 0 : item.status === filter)).map((item) => (
               <article className="card compact" key={item.id}>
@@ -350,7 +366,7 @@ function App() {
       )}
 
       {view === "item" && selectedItem && (
-        <ItemEditor item={selectedItem} store={selectedStore} photos={photos.filter((photo) => photo.storeId === selectedItem.storeId)} autoNext={autoNext} setAutoNext={setAutoNext} onBack={() => setView("items")} onPhoto={saveItemPhoto} onSave={saveItem} />
+        <ItemEditor item={selectedItem} photos={photos.filter((photo) => photo.storeId === selectedItem.storeId)} storeItems={storeItems} onBack={() => setView("items")} onMove={(id) => setSelectedItemId(id)} onPhoto={saveItemPhoto} onDeletePhoto={removeItemPhoto} onSave={saveItem} />
       )}
 
       {view === "validation" && (
@@ -399,6 +415,15 @@ function App() {
           stats={stats}
           storeCount={regionStores.length}
           completedStoreCount={regionStores.filter((store) => regionItems.filter((item) => item.storeId === store.id).every((item) => item.status === "완료")).length}
+          onClose={() => setSummaryOpen(false)}
+        />
+      )}
+      {summaryOpen && view === "items" && selectedStore && (
+        <SummaryModal
+          region={selectedStore.storeName}
+          stats={summarize(storeItems, photos.filter((photo) => photo.storeId === selectedStore.id))}
+          storeCount={1}
+          completedStoreCount={storeItems.every((item) => item.status === "완료") ? 1 : 0}
           onClose={() => setSummaryOpen(false)}
         />
       )}
@@ -494,24 +519,53 @@ function Contacts({ items }: { items: SurveyItem[] }) {
   return <section className="panel"><h2>업체 연락처</h2>{contacts.map((item) => <div className="contact" key={item.companyName + item.companyTel}><strong>{item.companyName || "업체명 없음"}</strong><span>담당자: {item.companyManager || "-"}</span><a href={`tel:${item.companyTel.replace(/[^\d+]/g, "")}`}><Phone size={15} />{item.companyTel || "연락처 없음"}</a><span>품목: {items.filter((candidate) => candidate.companyName === item.companyName).length}개</span></div>)}</section>;
 }
 
-function PhotoInput({ label, onFile }: { label: string; onFile: (file: File) => void }) {
-  return <label className="photo-button"><Camera size={18} />{label}<input type="file" accept="image/*" capture="environment" onChange={(event) => event.target.files?.[0] && onFile(event.target.files[0])} /></label>;
+function PhotoInput({ id, label, onFile }: { id?: string; label: string; onFile: (file: File) => void | Promise<void> }) {
+  return <label className="photo-button" htmlFor={id}><Camera size={18} />{label}<input id={id} type="file" accept="image/*" capture="environment" onChange={(event) => event.target.files?.[0] && onFile(event.target.files[0])} /></label>;
 }
 
-function ItemEditor({ item, store, photos, autoNext, setAutoNext, onBack, onPhoto, onSave }: { item: SurveyItem; store?: SurveyStore; photos: SurveyPhoto[]; autoNext: boolean; setAutoNext: (value: boolean) => void; onBack: () => void; onPhoto: (item: SurveyItem, type: PhotoType, file: File) => void; onSave: (item: SurveyItem, complete: boolean) => void }) {
+function ItemEditor({ item, photos, onBack, onPhoto, onDeletePhoto, onSave }: { item: SurveyItem; photos: SurveyPhoto[]; storeItems: SurveyItem[]; onBack: () => void; onMove: (id: string) => void; onPhoto: (item: SurveyItem, type: PhotoType, file: File) => Promise<void>; onDeletePhoto: (photo: SurveyPhoto) => Promise<void>; onSave: (item: SurveyItem) => void }) {
   const [draft, setDraft] = useState(item);
+  const [photoMessage, setPhotoMessage] = useState("");
   useEffect(() => setDraft(item), [item.id]);
   const update = (patch: Partial<SurveyItem>) => setDraft((old) => ({ ...old, ...patch, status: old.status === "미조사" ? "조사중" : old.status }));
   const missing = requiredPhotoLabels(draft, photos);
-  return <main className="page item-page"><section className="item-hero"><button onClick={onBack}>← 품목 리스트</button><h1>{draft.itemNo} {draft.productName}</h1><p>{draft.storeName} · 조사일 <input type="date" value={draft.surveyDate || store?.surveyDate || today()} onChange={(event) => update({ surveyDate: event.target.value })} /></p><Badge text={draft.status} /></section>
-    <section className="panel"><h2>① 사진자료</h2><p>업체사진: {photos.some((photo) => photo.type === "STORE_FRONT") ? "촬영완료" : "미촬영"} (ZIP 내보내기 시 품목별 .1 파일로 복사)</p><PhotoInput label="제품진열사진 촬영/첨부" onFile={(file) => onPhoto(draft, "PRODUCT_DISPLAY", file)} /><PhotoInput label="제품정보/후면/바코드사진 촬영/첨부" onFile={(file) => onPhoto(draft, "PRODUCT_INFO_BARCODE", file)} /><PhotoInput label="POS/영수증사진 촬영/첨부" onFile={(file) => onPhoto(draft, "POS_RECEIPT", file)} />{missing.length > 0 && <p className="warn">사진누락: {missing.join(", ")}</p>}</section>
+  const itemPhotos = {
+    display: photos.find((photo) => photo.itemId === draft.id && photo.type === "PRODUCT_DISPLAY"),
+    info: photos.find((photo) => photo.itemId === draft.id && photo.type === "PRODUCT_INFO_BARCODE"),
+    pos: photos.find((photo) => photo.itemId === draft.id && photo.type === "POS_RECEIPT"),
+  };
+  const nextBlank = () => {
+    const target = !itemPhotos.display ? "photo-product-display" : !itemPhotos.info ? "photo-product-info" : !itemPhotos.pos ? "photo-pos-receipt" : "";
+    if (target) document.getElementById(target)?.click();
+  };
+  const upload = async (type: PhotoType, file: File, label: string) => {
+    await onPhoto(draft, type, file);
+    setPhotoMessage(`${label} 업로드 완료`);
+  };
+  return <main className="page item-page"><section className="item-hero compact-hero"><button onClick={onBack}>← 이전</button><div><h1>{draft.itemNo} {draft.productName}</h1><Badge text={draft.status} /></div></section>
+    <section className="panel"><h2>① 사진자료</h2><p>업체사진: {photos.some((photo) => photo.type === "STORE_FRONT") ? "촬영완료" : "미촬영"} (ZIP 내보내기 시 품목별 .1 파일로 복사)</p>{photoMessage && <p className="ok upload-message">{photoMessage}</p>}<PhotoSlot id="photo-product-display" label="제품진열사진" photo={itemPhotos.display} onFile={(file) => upload("PRODUCT_DISPLAY", file, "제품진열사진")} onDelete={onDeletePhoto} /><PhotoSlot id="photo-product-info" label="제품정보/후면/바코드사진" photo={itemPhotos.info} onFile={(file) => upload("PRODUCT_INFO_BARCODE", file, "제품정보/후면/바코드사진")} onDelete={onDeletePhoto} /><PhotoSlot id="photo-pos-receipt" label="POS/영수증사진" photo={itemPhotos.pos} onFile={(file) => upload("POS_RECEIPT", file, "POS/영수증사진")} onDelete={onDeletePhoto} /><button className="row-button" onClick={nextBlank}>다음 빈칸으로 이동</button>{missing.length > 0 && <p className="warn">사진누락: {missing.join(", ")}</p>}</section>
     <details className="panel" open><summary>② 업체 제시정보</summary><Info item={draft} /></details>
     <section className="panel"><h2>③ 실물 확인</h2><Choice label="정상진열" value={draft.normalDisplay} values={["O", "X"]} onChange={(value) => update({ normalDisplay: value as SurveyItem["normalDisplay"] })} /><Choice label="규격일치" value={draft.specMatch} values={["O", "X", "-"]} onChange={(value) => update({ specMatch: value as SurveyItem["specMatch"] })} /><Choice label="바코드일치" value={draft.barcodeMatch} values={["O", "X", "-"]} onChange={(value) => update({ barcodeMatch: value as SurveyItem["barcodeMatch"] })} /></section>
     <section className="panel"><h2>④ 가격 판단</h2><Money label="정상가" value={draft.normalPrice} onChange={(value) => update({ normalPrice: num(value) })} /><Choice label="할인 여부" value={draft.hasDiscount === null ? "" : draft.hasDiscount ? "할인 있음" : "할인 없음"} values={["할인 없음", "할인 있음"]} onChange={(value) => update({ hasDiscount: value === "할인 있음" })} /><Money label="할인가" value={draft.discountPrice} onChange={(value) => update({ discountPrice: num(value) })} /><label>할인 시작일<input type="date" value={draft.discountStartDate} onChange={(event) => update({ discountStartDate: event.target.value })} /></label><label>할인 종료일<input type="date" value={draft.discountEndDate} onChange={(event) => update({ discountEndDate: event.target.value })} /></label><DiscountPeriod value={draft.discountType} oral={draft.discountOral ?? draft.discountType.includes("구두")} onChange={(discountType, discountOral) => update({ discountType, discountOral })} />{draft.basePrice !== null && draft.normalPrice !== null && <p className="notice">참고: 정상가가 기준가격보다 {draft.normalPrice < draft.basePrice ? "낮습니다" : draft.normalPrice > draft.basePrice ? "높습니다" : "같습니다"}.</p>}</section>
     <section className="panel"><h2>⑤ 진열상태</h2>{draft.normalDisplay === "X" ? <><Choice label="바코드 등록 여부" value={draft.barcodeRegistered} values={["O", "X"]} onChange={(value) => update({ barcodeRegistered: value as SurveyItem["barcodeRegistered"] })} /><Choice label="상태" value={draft.abnormalStatus} values={["미진열", "미판매"]} onChange={(value) => update({ abnormalStatus: value as SurveyItem["abnormalStatus"] })} /><Choice label="POS 조회 여부" value={draft.posChecked} values={["조회함", "조회불가", "미조회"]} onChange={(value) => update({ posChecked: value as SurveyItem["posChecked"] })} /><Money label="POS 확인 가격" value={draft.posPrice} onChange={(value) => update({ posPrice: num(value) })} /></> : <p className="notice">정상진열 X일 때만 바코드 등록 여부, 미진열/미판매, POS 정보를 입력합니다.</p>}</section>
     <section className="panel"><h2>⑥ 특이사항</h2><Choice label="비정상진열" value={draft.abnormalDisplay ?? ""} values={["O", "X"]} onChange={(value) => update({ abnormalDisplay: value as SurveyItem["abnormalDisplay"] })} />{draft.abnormalDisplay === "O" && <p className="warn">비정상진열이면 어떤 위치에 어떻게 진열되어 있었는지 특이사항에 적어주세요.</p>}<div className="chips">{["가격표 수기 작성", "POS 확인", "규격 불일치", "바코드 불일치", "장기 할인", "구두 확인", "비정상진열", "미진열", "미판매", "폐점", "품절", "기타"].map((text) => <button key={text} onClick={() => update({ memo: draft.memo ? `${draft.memo} / ${text}` : text })}>{text}</button>)}</div><textarea placeholder="예: 같은 카테고리 매대가 아닌 행사 매대에 단독 진열 / 위치 혼재 / 진열 위치 확인 필요" value={draft.memo} onChange={(event) => update({ memo: event.target.value })} /></section>
-    <footer className="bottom-bar"><label><input type="checkbox" checked={autoNext} onChange={(event) => setAutoNext(event.target.checked)} /> 완료 저장 후 다음 품목</label><button onClick={onBack}>이전</button><button onClick={() => onSave(draft, false)}>임시저장</button><button className="primary" onClick={() => onSave(draft, true)}><CheckCircle2 size={17} />완료저장</button></footer>
+    <button className="save-fab primary" onClick={() => onSave(draft)} aria-label="저장"><CheckCircle2 size={22} />저장</button>
   </main>;
+}
+
+function PhotoSlot({ id, label, photo, onFile, onDelete }: { id: string; label: string; photo?: SurveyPhoto; onFile: (file: File) => void | Promise<void>; onDelete: (photo: SurveyPhoto) => void | Promise<void> }) {
+  return (
+    <div className={`photo-slot ${photo ? "uploaded" : ""}`}>
+      <div>
+        <strong>{label}</strong>
+        <span>{photo ? "업로드됨" : "미업로드"}</span>
+      </div>
+      <div className="photo-actions">
+        <PhotoInput id={id} label={photo ? "다시 올리기" : "촬영/첨부"} onFile={onFile} />
+        {photo && <button className="danger" onClick={() => onDelete(photo)}>지우기</button>}
+      </div>
+    </div>
+  );
 }
 
 function Info({ item }: { item: SurveyItem }) {

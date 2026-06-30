@@ -95,6 +95,23 @@ textarea { min-height: 110px; resize: vertical; }
 .search { position: relative; margin: 8px 0 14px; }
 .search svg { position: absolute; left: 12px; top: 13px; color: #5c6870; }
 .search input { padding-left: 40px; }
+.recent-region {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -4px 0 14px;
+  color: #52616b;
+  font-size: 14px;
+  font-weight: 800;
+}
+.recent-region button {
+  min-height: 32px;
+  border-radius: 999px;
+  padding: 0 12px;
+  background: #ecfeff;
+  border-color: #67e8f9;
+  color: #155e75;
+}
 .workspace-title {
   display: flex;
   justify-content: space-between;
@@ -220,12 +237,52 @@ textarea { min-height: 110px; resize: vertical; }
   cursor: pointer;
 }
 .photo-button input { display: none; }
+.photo-slot {
+  border: 1px solid #dbe1e5;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 10px;
+  display: grid;
+  gap: 10px;
+  background: #f8fafc;
+}
+.photo-slot.uploaded {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+.photo-slot > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.photo-slot span {
+  color: #52616b;
+  font-weight: 800;
+}
+.photo-actions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+.photo-actions .photo-button { margin: 0; min-height: 46px; }
+.upload-message { margin: 0 0 10px; }
 .item-hero {
   position: sticky;
   top: 64px;
   z-index: 6;
   background: #f6f7f8;
   padding: 12px 0;
+}
+.compact-hero {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: center;
+}
+.compact-hero h1 {
+  font-size: 18px;
+  margin: 0 0 6px;
 }
 .info { display: grid; grid-template-columns: 130px 1fr; gap: 8px; }
 .info dt { font-weight: 800; color: #52616b; }
@@ -257,6 +314,16 @@ textarea { min-height: 110px; resize: vertical; }
 }
 .bottom-bar label { display: flex; align-items: center; gap: 6px; margin: 0; }
 .bottom-bar input { width: auto; min-height: auto; }
+.save-fab {
+  position: fixed;
+  right: 16px;
+  bottom: 18px;
+  z-index: 25;
+  min-width: 86px;
+  height: 56px;
+  border-radius: 999px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, .22);
+}
 .sticky-lite { width: 100%; min-height: 56px; }
 .row-button { width: 100%; justify-content: flex-start; margin-bottom: 6px; }
 .store-card { position: relative; }
@@ -370,4 +437,6 @@ textarea { min-height: 110px; resize: vertical; }
   .page-head { align-items: stretch; flex-direction: column; }
   .bottom-bar button { flex: 1 1 120px; }
   .card-actions { grid-template-columns: 1fr; }
+  .photo-actions { grid-template-columns: 1fr; }
+  .save-fab { right: 12px; bottom: 14px; }
 }

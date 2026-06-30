@@ -92,6 +92,10 @@ export async function putPhoto(photo: SurveyPhoto) {
   await (await dbPromise).put("photos", photo);
 }
 
+export async function deletePhoto(id: string) {
+  await (await dbPromise).delete("photos", id);
+}
+
 export async function importRegionData(region: string, stores: SurveyStore[], items: SurveyItem[], photos: SurveyPhoto[]) {
   const db = await dbPromise;
   const tx = db.transaction(["regions", "stores", "items", "photos"], "readwrite");
