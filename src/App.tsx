@@ -306,7 +306,7 @@ function App() {
                 <article className="card" key={region.name}>
                   <h2>{region.name}</h2>
                   <p className="area-summary">{region.areaSummary || region.city || "-"}</p>
-                  <p className="muted">담당부서: {region.department || "-"} · 지역: {region.name}</p>
+                  <p className="muted">담당부서: {region.department || "-"}</p>
                   <RegionSummary stats={summary.total ? summary : emptyStats} itemStats={summarize(items.filter((item) => item.region === region.name), region.name === currentRegion ? photos : [])} />
                   <div className="region-actions">
                     <button className="primary" onClick={() => chooseRegion(region.name)}>작업</button>
