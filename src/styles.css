@@ -501,11 +501,14 @@ textarea { min-height: 110px; resize: vertical; }
 .info dd { margin: 0; }
 .field-row { display: grid; grid-template-columns: 130px 1fr; gap: 10px; align-items: center; margin-bottom: 12px; }
 .disabled-block {
-  opacity: .48;
+  opacity: .58;
 }
 .disabled-block input,
 .disabled-block button {
   cursor: not-allowed;
+}
+.store-photo-delete {
+  margin-top: 8px;
 }
 .period-control { display: grid; gap: 8px; }
 .inline-check {
