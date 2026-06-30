@@ -7,7 +7,7 @@ import { mapSearchAddress, requiredPhotoLabels, summarize } from "./logic";
 import type { AppSettings, BackupPayload, PhotoType, Region, RegionStats, SurveyItem, SurveyPhoto, SurveyStore } from "./types";
 
 type View = "upload" | "regions" | "workspace" | "store" | "items" | "item" | "backup" | "validation";
-type Filter = "전체" | "미조사" | "조사중" | "완료" | "사진누락";
+type Filter = "전체" | "미완료" | "미조사" | "조사중" | "완료" | "사진누락";
 type StoreSort = "품목 많은 순" | "미완료 많은 순" | "사진누락 많은 순" | "주소순";
 
 const mapLinks = (address: string) => [
@@ -33,7 +33,7 @@ function App() {
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [selectedItemId, setSelectedItemId] = useState("");
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>("전체");
+  const [filter, setFilter] = useState<Filter>("미완료");
   const [surveyFile, setSurveyFile] = useState<File | null>(null);
   const [contactFile, setContactFile] = useState<File | null>(null);
   const [analysis, setAnalysis] = useState("");
@@ -137,7 +137,7 @@ function App() {
     setSelectedStoreId("");
     setSelectedItemId("");
     setQuery("");
-    setFilter("전체");
+    setFilter("미완료");
     await refresh(region);
     setView("workspace");
   }
@@ -338,10 +338,10 @@ function App() {
               <FilterBar filter={filter} setFilter={setFilter} />
               <label className="sort-control">정렬
                 <select value={storeSort} onChange={(event) => setStoreSort(event.target.value as StoreSort)}>
+                  <option>주소순</option>
                   <option>미완료 많은 순</option>
                   <option>품목 많은 순</option>
                   <option>사진누락 많은 순</option>
-                  <option>주소순</option>
                 </select>
               </label>
               <a className="map-ref" target="_blank" href="https://www.google.com/maps/d/u/1/viewer?mid=1ej99Lo6WS4GROBCQPr0a66MhQR_vXuM&ll=37.49945198941339%2C127.04262669775987&z=14">조사대상 참고 지도 열기</a>
@@ -352,7 +352,8 @@ function App() {
               const ownItems = regionItems.filter((item) => item.storeId === store.id);
               const ownPhotos = photos.filter((photo) => photo.storeId === store.id);
               const ownStats = summarize(ownItems, ownPhotos);
-              if (filter !== "전체" && filter !== "사진누락" && !ownItems.some((item) => item.status === filter)) return null;
+              if (filter === "미완료" && ownStats.completed >= ownStats.total) return null;
+              if (filter !== "전체" && filter !== "미완료" && filter !== "사진누락" && !ownItems.some((item) => item.status === filter)) return null;
               if (filter === "사진누락" && ownStats.photoMissing === 0) return null;
               return <StoreCard key={store.id} store={store} stats={ownStats} items={ownItems} focused={selectedStoreId === store.id} onOpen={() => openStore(store)} onContacts={() => setContactStoreId(store.id)} />;
             })}
@@ -396,7 +397,7 @@ function App() {
             </section>
           )}
           <div className="list">
-            {storeItems.filter((item) => `${item.itemNo} ${item.productName} ${item.barcode}`.includes(query)).filter((item) => filter === "전체" || (filter === "사진누락" ? requiredPhotoLabels(item, photos.filter((photo) => photo.storeId === item.storeId)).length > 0 : item.status === filter)).map((item) => (
+            {storeItems.filter((item) => `${item.itemNo} ${item.productName} ${item.barcode}`.includes(query)).filter((item) => filter === "전체" || (filter === "미완료" ? item.status !== "완료" : filter === "사진누락" ? requiredPhotoLabels(item, photos.filter((photo) => photo.storeId === item.storeId)).length > 0 : item.status === filter)).map((item) => (
               <article className={`card compact item-card ${selectedItemId === item.id ? "focused" : ""}`} key={item.id}>
                 <div className="item-card-head"><h2 className="item-title"><span className="item-code">{item.itemNo}</span><span>{item.productName}</span></h2><Badge text={item.status} /></div>
                 <p>바코드: {item.barcode || "-"} · 기준가격: {item.basePrice?.toLocaleString() ?? "-"}원</p>
@@ -478,7 +479,7 @@ function SearchBox({ value, onChange, placeholder }: { value: string; onChange: 
 }
 
 function FilterBar({ filter, setFilter }: { filter: Filter; setFilter: (filter: Filter) => void }) {
-  return <div className="segmented">{(["전체", "미조사", "조사중", "완료", "사진누락"] as Filter[]).map((value) => <button className={filter === value ? "active" : ""} key={value} onClick={() => setFilter(value)}>{value}</button>)}</div>;
+  return <div className="segmented filter-chips">{(["전체", "미완료", "미조사", "조사중", "완료", "사진누락"] as Filter[]).map((value) => <button className={filter === value ? "active" : ""} key={value} onClick={() => setFilter(value)}>{value}</button>)}</div>;
 }
 
 function Stats({ stats, totalLabel = "전체" }: { stats: RegionStats; totalLabel?: string }) {

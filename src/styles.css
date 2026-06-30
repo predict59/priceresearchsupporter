@@ -363,6 +363,25 @@ textarea { min-height: 110px; resize: vertical; }
 .badge-미조사 { background: #eef2f4; color: #475569; }
 .segmented { display: flex; flex-wrap: wrap; gap: 6px; }
 .segmented button.active { background: #155e75; border-color: #155e75; color: #fff; }
+.filter-chips {
+  gap: 5px;
+  margin-bottom: 8px;
+}
+.filter-chips button {
+  min-height: 30px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+.filter-chips button.active {
+  background: #0f766e;
+  border-color: #0f766e;
+  color: #fff;
+}
 .map-ref { display: inline-flex; margin-bottom: 14px; color: #0f766e; font-weight: 800; }
 .contact { display: grid; gap: 4px; padding: 10px 0; border-top: 1px solid #eef2f4; }
 .contact a { color: #0f766e; display: inline-flex; gap: 5px; align-items: center; }
