@@ -18,6 +18,7 @@ const mapLinks = (address: string) => [
 
 const emptyStats: RegionStats = { total: 0, completed: 0, inProgress: 0, notStarted: 0, photoMissing: 0 };
 const num = (value: string) => (value === "" ? null : Number(value));
+const EXCEL_ACCEPT = ".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream";
 
 function App() {
   const [view, setView] = useState<View>("upload");
@@ -233,9 +234,10 @@ function App() {
         <main className="page narrow">
           <h1>국군복지단 가격조사 PWA</h1>
           <section className="panel">
-            <label>조사표 엑셀 업로드<input type="file" accept=".xlsx,.xls,.csv" onChange={(event) => setSurveyFile(event.target.files?.[0] ?? null)} /></label>
-            <label>업체 연락처 엑셀 업로드<input type="file" accept=".xlsx,.xls,.csv" onChange={(event) => setContactFile(event.target.files?.[0] ?? null)} /></label>
-            <label>바코드 포함 조사표 업로드<input type="file" accept=".xlsx,.xls,.csv" /></label>
+            <label>조사표 엑셀 업로드<input type="file" accept={EXCEL_ACCEPT} onChange={(event) => setSurveyFile(event.target.files?.[0] ?? null)} /></label>
+            <label>업체 연락처 엑셀 업로드<input type="file" accept={EXCEL_ACCEPT} onChange={(event) => setContactFile(event.target.files?.[0] ?? null)} /></label>
+            <label>바코드 포함 조사표 업로드<input type="file" accept={EXCEL_ACCEPT} /></label>
+            <p className="hint">모바일에서 파일이 안 보이면 파일 앱의 다운로드/OneDrive/Google 드라이브에서 엑셀 파일을 먼저 내려받은 뒤 선택하세요.</p>
             <button className="primary" onClick={analyzeFiles} disabled={isAnalyzing}><Upload size={18} />{isAnalyzing ? "자료 분석 중..." : "자료 분석 시작"}</button>
             {analysis && <p className="notice">{analysis}</p>}
           </section>
