@@ -105,7 +105,7 @@ export async function exportRegionZip(region: string, stores: SurveyStore[], ite
     const display = photoOf(photos, "PRODUCT_DISPLAY", item);
     const info = photoOf(photos, "PRODUCT_INFO_BARCODE", item);
     const pos = photoOf(photos, "POS_RECEIPT", item);
-    const name = safeFilePart(item.productName || item.itemNo);
+    const name = safeFilePart(item.itemNo || item.productName);
     if (front) zip.file(`${name}.1.jpg`, front.blob);
     if (display) zip.file(`${name}.2.jpg`, display.blob);
     if (info) zip.file(`${name}.3.jpg`, info.blob);
