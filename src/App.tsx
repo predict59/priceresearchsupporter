@@ -23,6 +23,8 @@ const num = (value: string) => {
   return digits === "" ? null : Number(digits);
 };
 const EXCEL_ACCEPT = ".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream";
+const PHOTO_MAX_EDGE = 1800;
+const PHOTO_JPEG_QUALITY = 0.82;
 type BarcodeDetectorConstructor = new (options?: { formats?: string[] }) => {
   detect: (source: ImageBitmapSource) => Promise<Array<{ rawValue: string }>>;
 };
@@ -85,6 +87,27 @@ async function detectBarcodeFromFile(file: File) {
       await new Promise((resolve) => window.setTimeout(resolve, 0));
     }
     return { supported: true, values: Array.from(values) };
+  } finally {
+    bitmap.close();
+  }
+}
+
+async function resizePhoto(file: File) {
+  if (!file.type.startsWith("image/")) return { blob: file, mimeType: file.type || "application/octet-stream", originalSize: file.size, resizedSize: file.size };
+  const bitmap = await createImageBitmap(file);
+  try {
+    const scale = Math.min(1, PHOTO_MAX_EDGE / Math.max(bitmap.width, bitmap.height));
+    const width = Math.max(1, Math.round(bitmap.width * scale));
+    const height = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) return { blob: file, mimeType: file.type || "application/octet-stream", originalSize: file.size, resizedSize: file.size };
+    context.drawImage(bitmap, 0, 0, width, height);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", PHOTO_JPEG_QUALITY));
+    const output = blob && blob.size < file.size ? blob : file;
+    return { blob: output, mimeType: output.type || file.type || "image/jpeg", originalSize: file.size, resizedSize: output.size };
   } finally {
     bitmap.close();
   }
@@ -285,7 +308,8 @@ function App() {
   async function saveStorePhoto(file: File) {
     if (!selectedStore) return;
     if (selectedStore.frontPhotoId) await deletePhoto(selectedStore.frontPhotoId);
-    const photo: SurveyPhoto = { id: uid("photo"), region: selectedStore.region, storeId: selectedStore.id, type: "STORE_FRONT", blob: file, originalName: file.name, mimeType: file.type, takenAt: now() };
+    const resized = await resizePhoto(file);
+    const photo: SurveyPhoto = { id: uid("photo"), region: selectedStore.region, storeId: selectedStore.id, type: "STORE_FRONT", blob: resized.blob, originalName: file.name, mimeType: resized.mimeType, takenAt: now() };
     await putPhoto(photo);
     await putStore({ ...selectedStore, frontPhotoId: photo.id, status: "진행중", startedAt: selectedStore.startedAt ?? now(), updatedAt: now() });
     await refresh(selectedStore.region);
@@ -301,7 +325,8 @@ function App() {
   async function saveItemPhoto(item: SurveyItem, type: PhotoType, file: File) {
     const oldPhotos = await getPhotosByStore(item.storeId);
     await Promise.all(oldPhotos.filter((photo) => photo.itemId === item.id && photo.type === type).map((photo) => deletePhoto(photo.id)));
-    const photo: SurveyPhoto = { id: uid("photo"), region: item.region, storeId: item.storeId, itemId: item.id, type, blob: file, originalName: file.name, mimeType: file.type, takenAt: now() };
+    const resized = await resizePhoto(file);
+    const photo: SurveyPhoto = { id: uid("photo"), region: item.region, storeId: item.storeId, itemId: item.id, type, blob: resized.blob, originalName: file.name, mimeType: resized.mimeType, takenAt: now() };
     await putPhoto(photo);
     await refresh(item.region);
   }
