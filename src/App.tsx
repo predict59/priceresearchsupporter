@@ -342,6 +342,12 @@ function App() {
     : view === "validation" ? "검증"
     : view === "backup" ? "백업/복원"
     : "국군복지단 가격조사";
+  const topContext =
+    view === "store" || view === "items" || view === "item"
+      ? `현재 업체: ${selectedStore?.storeName ?? selectedItem?.storeName ?? "-"}`
+      : view === "workspace" || view === "validation"
+        ? currentRegion ? `현재 지역: ${currentRegion}` : ""
+        : "";
 
   return (
     <div className="app">
@@ -349,7 +355,7 @@ function App() {
         <div className="top-main">
           <button className="top-back icon-button" onClick={goBack} disabled={!canGoBack} aria-label="뒤로가기">←</button>
           <button className="brand" onClick={() => { setStoreQuery(""); setItemQuery(""); setView(regions.length ? "regions" : "upload"); }}>{screenTitle}</button>
-          <span className="current">{currentRegion ? `현재 지역: ${currentRegion}` : "지역 미선택"}</span>
+          <span className="current">{topContext}</span>
           <button className="top-toggle icon-button" onClick={() => setMenuOpen((value) => !value)} aria-expanded={menuOpen} aria-label="메뉴 열기">
             <Menu size={20} />
           </button>
