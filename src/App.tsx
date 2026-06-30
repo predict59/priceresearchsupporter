@@ -33,7 +33,9 @@ function App() {
   const [photos, setPhotos] = useState<SurveyPhoto[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [selectedItemId, setSelectedItemId] = useState("");
-  const [query, setQuery] = useState("");
+  const [regionQuery, setRegionQuery] = useState("");
+  const [storeQuery, setStoreQuery] = useState("");
+  const [itemQuery, setItemQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("미완료");
   const [surveyFile, setSurveyFile] = useState<File | null>(null);
   const [contactFile, setContactFile] = useState<File | null>(null);
@@ -72,14 +74,14 @@ function App() {
       store.storeAddress,
       ...ownItems.flatMap((item) => [item.productName, item.barcode]),
     ].join(" ");
-    if (!searchText.includes(query)) return false;
+    if (!searchText.includes(storeQuery)) return false;
     const ownPhotos = photos.filter((photo) => photo.storeId === store.id);
     const ownStats = summarize(ownItems, ownPhotos);
     if (filter === "미완료" && ownStats.completed >= ownStats.total) return false;
     if (filter !== "전체" && filter !== "미완료" && filter !== "사진누락" && !ownItems.some((item) => item.status === filter)) return false;
     if (filter === "사진누락" && ownStats.photoMissing === 0) return false;
     return true;
-  }), [sortedRegionStores, query, regionItems, photos, filter]);
+  }), [sortedRegionStores, storeQuery, regionItems, photos, filter]);
   const selectedStore = stores.find((store) => store.id === selectedStoreId);
   const storeItems = useMemo(() => items.filter((item) => item.storeId === selectedStoreId), [items, selectedStoreId]);
   const selectedItem = items.find((item) => item.id === selectedItemId);
@@ -169,7 +171,8 @@ function App() {
     await updateSettings({ currentRegion: region });
     setSelectedStoreId("");
     setSelectedItemId("");
-    setQuery("");
+    setStoreQuery("");
+    setItemQuery("");
     setFilter("미완료");
     setOrderEditing(false);
     setDragStoreId("");
@@ -179,6 +182,7 @@ function App() {
 
   async function openStore(store: SurveyStore) {
     setSelectedStoreId(store.id);
+    setItemQuery("");
     await updateSettings({ lastOpenedStoreId: store.id, currentRegion: store.region });
     setView("store");
   }
@@ -309,13 +313,25 @@ function App() {
   const canGoBack = view !== "upload" && !(view === "regions" && regions.length > 0);
   const goBack = () => {
     setMenuOpen(false);
-    if (view === "workspace") setView("regions");
+    if (view === "workspace") {
+      setStoreQuery("");
+      setItemQuery("");
+      setView("regions");
+    }
     else if (view === "store") setView("workspace");
-    else if (view === "items") setView("store");
+    else if (view === "items") {
+      setItemQuery("");
+      setView("store");
+    }
     else if (view === "item") setView("items");
     else if (view === "validation") setView(currentRegion ? "workspace" : "regions");
     else if (view === "backup") setView(regions.length ? "regions" : "upload");
-    else if (view === "regions") setView("upload");
+    else if (view === "regions") {
+      setRegionQuery("");
+      setStoreQuery("");
+      setItemQuery("");
+      setView("upload");
+    }
   };
   const screenTitle =
     view === "regions" ? "지역리스트"
@@ -332,14 +348,14 @@ function App() {
       <header className={`topbar ${menuOpen ? "menu-open" : ""}`}>
         <div className="top-main">
           <button className="top-back icon-button" onClick={goBack} disabled={!canGoBack} aria-label="뒤로가기">←</button>
-          <button className="brand" onClick={() => setView(regions.length ? "regions" : "upload")}>{screenTitle}</button>
+          <button className="brand" onClick={() => { setStoreQuery(""); setItemQuery(""); setView(regions.length ? "regions" : "upload"); }}>{screenTitle}</button>
           <span className="current">{currentRegion ? `현재 지역: ${currentRegion}` : "지역 미선택"}</span>
           <button className="top-toggle icon-button" onClick={() => setMenuOpen((value) => !value)} aria-expanded={menuOpen} aria-label="메뉴 열기">
             <Menu size={20} />
           </button>
         </div>
         <div className="top-actions">
-          <button onClick={() => { setView("regions"); setMenuOpen(false); }}>지역 선택</button>
+          <button onClick={() => { setStoreQuery(""); setItemQuery(""); setView("regions"); setMenuOpen(false); }}>지역 선택</button>
           <button disabled={!currentRegion} onClick={() => { setView("validation"); setMenuOpen(false); }}>검증</button>
           <button onClick={() => { setView("backup"); setMenuOpen(false); }}>백업/복원</button>
         </div>
@@ -362,7 +378,7 @@ function App() {
 
       {view === "regions" && (
         <main className="page">
-          <SearchBox value={query} onChange={setQuery} placeholder="지역명 검색" />
+          <SearchBox value={regionQuery} onChange={setRegionQuery} placeholder="지역명 검색" />
           {currentRegion && regions.some((region) => region.name === currentRegion) && (
             <div className="recent-region">
               <span>최근 지역</span>
@@ -370,7 +386,7 @@ function App() {
             </div>
           )}
           <div className="grid">
-            {regions.filter((region) => region.name.includes(query)).map((region) => {
+            {regions.filter((region) => region.name.includes(regionQuery)).map((region) => {
               const summary = regionSummary(region.name);
               return (
                 <article className="card" key={region.name}>
@@ -394,7 +410,7 @@ function App() {
       {view === "workspace" && currentRegion && (
         <main className="page">
           <div className="sticky-search workspace-search">
-            <SearchBox value={query} onChange={setQuery} placeholder="마트명 / 업체명 / 주소 / 품목명 / 바코드" />
+            <SearchBox value={storeQuery} onChange={setStoreQuery} placeholder="마트명 / 업체명 / 주소 / 품목명 / 바코드" />
             <button className="tool-toggle" onClick={() => setWorkspaceToolsOpen((value) => !value)} aria-expanded={workspaceToolsOpen}>
               <SlidersHorizontal size={18} /> 필터 {workspaceToolsOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </button>
@@ -467,7 +483,7 @@ function App() {
           <section className="panel">
             <p>조사 품목: {storeItems.length.toLocaleString()}건</p>
             <label>방문 조사일<input type="date" value={selectedStore.surveyDate} onChange={async (event) => { await putStore({ ...selectedStore, surveyDate: event.target.value, updatedAt: now() }); await refresh(selectedStore.region); }} /></label>
-            <button className="primary sticky-lite" onClick={() => selectedStore.frontPhotoId ? setView("items") : alert("업체 전경사진을 먼저 촬영/선택해 주세요.")}>조사 입력</button>
+            <button className="primary sticky-lite" onClick={() => selectedStore.frontPhotoId ? (setItemQuery(""), setView("items")) : alert("업체 전경사진을 먼저 촬영/선택해 주세요.")}>조사 입력</button>
           </section>
         </main>
       )}
@@ -475,7 +491,7 @@ function App() {
       {view === "items" && selectedStore && (
         <main className="page">
           <div className="sticky-search item-search">
-            <SearchBox value={query} onChange={setQuery} placeholder="품목명 / 바코드 / 순번 검색" />
+            <SearchBox value={itemQuery} onChange={setItemQuery} placeholder="품목명 / 바코드 / 순번 검색" />
             <button className="tool-toggle icon-button" onClick={() => setSummaryOpen(true)} aria-label="현황 보기"><InfoIcon size={18} /></button>
             <button className="tool-toggle" onClick={() => setItemToolsOpen((value) => !value)} aria-expanded={itemToolsOpen}>
               <SlidersHorizontal size={18} /> 필터 {itemToolsOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
@@ -488,7 +504,7 @@ function App() {
             </section>
           )}
           <div className="list">
-            {storeItems.filter((item) => `${item.itemNo} ${item.productName} ${item.barcode}`.includes(query)).filter((item) => filter === "전체" || (filter === "미완료" ? item.status !== "완료" : filter === "사진누락" ? requiredPhotoLabels(item, photos.filter((photo) => photo.storeId === item.storeId)).length > 0 : item.status === filter)).map((item) => (
+            {storeItems.filter((item) => `${item.itemNo} ${item.productName} ${item.barcode}`.includes(itemQuery)).filter((item) => filter === "전체" || (filter === "미완료" ? item.status !== "완료" : filter === "사진누락" ? requiredPhotoLabels(item, photos.filter((photo) => photo.storeId === item.storeId)).length > 0 : item.status === filter)).map((item) => (
               <article className={`card compact item-card ${selectedItemId === item.id ? "focused" : ""}`} key={item.id}>
                 <div className="item-card-head"><h2 className="item-title"><span className="item-code">{item.itemNo}</span><span>{item.productName}</span></h2><Badge text={item.status} /></div>
                 <p>바코드: {item.barcode || "-"} · 기준가격: {item.basePrice?.toLocaleString() ?? "-"}원</p>
