@@ -599,6 +599,22 @@ function StoreCard({
   const completed = items.filter((item) => item.status === "완료");
   const latestSurveyDate = completed.map((item) => item.surveyDate).filter(Boolean).sort().at(-1) ?? "-";
   const percent = stats.total ? Math.round((stats.completed / stats.total) * 100) : 0;
+  if (orderEditing) {
+    return (
+      <article className={`visit-order-row ${focused ? "focused" : ""}`}>
+        <input aria-label={`${store.storeName} 방문순서`} inputMode="numeric" value={store.visitOrder ?? ""} placeholder="-" onChange={(event) => onOrderChange(event.target.value)} />
+        <div className="visit-order-name">
+          <strong>{store.storeName}</strong>
+          <span>{store.storeAddress || "주소 없음"}</span>
+        </div>
+        <div className="visit-order-actions">
+          <button type="button" onClick={onMoveUp}>↑</button>
+          <button type="button" onClick={onMoveDown}>↓</button>
+        </div>
+      </article>
+    );
+  }
+
   return (
     <article className={`card store-card ${focused ? "focused" : ""}`}>
       <div className="card-head">
@@ -625,16 +641,6 @@ function StoreCard({
         {stats.photoMissing > 0 && <span className="store-missing">품목사진 누락 {stats.photoMissing.toLocaleString()}건</span>}
         <span className="store-date">조사일: {latestSurveyDate}</span>
       </div>
-      {orderEditing && (
-        <div className="visit-order-editor">
-          <label>
-            방문순서
-            <input inputMode="numeric" value={store.visitOrder ?? ""} placeholder="-" onChange={(event) => onOrderChange(event.target.value)} />
-          </label>
-          <button type="button" onClick={onMoveUp}>위로</button>
-          <button type="button" onClick={onMoveDown}>아래로</button>
-        </div>
-      )}
       <div className="card-actions">
         <button onClick={onContacts}><Phone size={16} />담당자 정보</button>
         <button className="primary" onClick={onOpen}>입력</button>
