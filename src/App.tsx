@@ -374,7 +374,7 @@ function App() {
           <section className="panel">
             <p>조사 품목: {storeItems.length.toLocaleString()}건</p>
             <label>방문 조사일<input type="date" value={selectedStore.surveyDate} onChange={async (event) => { await putStore({ ...selectedStore, surveyDate: event.target.value, updatedAt: now() }); await refresh(selectedStore.region); }} /></label>
-            <button className="primary sticky-lite" onClick={() => setView("items")}>조사 입력</button>
+            <button className="primary sticky-lite" onClick={() => selectedStore.frontPhotoId ? setView("items") : alert("업체 전경사진을 먼저 촬영/선택해 주세요.")}>조사 입력</button>
           </section>
         </main>
       )}
@@ -668,7 +668,11 @@ function ItemEditor({ item, storeItems, photos, onPhoto, onDeletePhoto, onSave, 
   const nextTodoId = () => {
     const currentIndex = storeItems.findIndex((candidate) => candidate.id === draft.id);
     const ordered = [...storeItems.slice(currentIndex + 1), ...storeItems.slice(0, Math.max(0, currentIndex))];
-    return (ordered.find((candidate) => candidate.status !== "완료") ?? ordered[0])?.id;
+    return ordered.find((candidate) => candidate.status !== "완료")?.id;
+  };
+  const nextSequentialId = () => {
+    const currentIndex = storeItems.findIndex((candidate) => candidate.id === draft.id);
+    return storeItems[currentIndex + 1]?.id;
   };
   const handleSave = async () => {
     setIsSaving(true);
@@ -678,6 +682,12 @@ function ItemEditor({ item, storeItems, photos, onPhoto, onDeletePhoto, onSave, 
       if (saved) {
         setDraft((old) => ({ ...old, status: "완료" }));
         setSaveMessage(`저장 완료 · ${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}`);
+        const nextId = nextTodoId();
+        if (nextId) {
+          if (confirm("저장되었습니다. 다음 미등록 상품으로 이동할까요?")) onMove(nextId);
+        } else if (confirm("전 품목 입력완료입니다. 목록으로 돌아갈까요?")) {
+          onList();
+        }
       } else {
         setSaveMessage("저장이 취소되었습니다.");
       }
@@ -705,21 +715,9 @@ function ItemEditor({ item, storeItems, photos, onPhoto, onDeletePhoto, onSave, 
     }
   };
   const saveAndNext = async () => {
-    setIsSaving(true);
-    setSaveMessage("저장 중...");
-    try {
-      const saved = await onSave(draft);
-      const nextId = nextTodoId();
-      if (saved && nextId) onMove(nextId);
-      else if (saved) onList();
-      else setSaveMessage("저장이 취소되었습니다.");
-    } catch (error) {
-      console.error(error);
-      setSaveMessage("저장 실패: 다시 눌러주세요.");
-      alert("저장에 실패했습니다. 다시 시도해 주세요.");
-    } finally {
-      setIsSaving(false);
-    }
+    const nextId = nextSequentialId();
+    if (nextId) onMove(nextId);
+    else alert("마지막 품목입니다.");
   };
   return <main className="page item-page"><section className="item-hero compact-hero"><div><h1 className="item-title"><span className="item-code">{draft.itemNo}</span><span>{draft.productName}</span></h1><Badge text={draft.status} /></div></section>
     <ItemContact item={draft} />
@@ -731,6 +729,7 @@ function ItemEditor({ item, storeItems, photos, onPhoto, onDeletePhoto, onSave, 
     <section className="panel"><h2>⑥ 비정상 진열 / 비고</h2><div className="abnormal-block"><Choice label="비정상진열" value={draft.abnormalDisplay ?? ""} values={["O", "X"]} onChange={(value) => update({ abnormalDisplay: value as SurveyItem["abnormalDisplay"] })} />{draft.abnormalDisplay === "O" && <p className="small-help warn">비정상진열이면 어떤 위치에 어떻게 진열되어 있었는지 아래 비고에 적어주세요.</p>}</div><div className="memo-block"><h3>비고</h3><p className="small-help">자주 쓰는 문구를 누르면 비고에 추가됩니다.</p><div className="chips memo-chips">{["가격표 수기 작성", "POS 확인", "규격 불일치", "바코드 불일치", "장기 할인", "구두 확인", "비정상진열", "미진열", "미판매", "폐점", "품절", "기타"].map((text) => <button key={text} onClick={() => update({ memo: draft.memo ? `${draft.memo} / ${text}` : text })}>{text}</button>)}</div><textarea placeholder="예: 같은 카테고리 매대가 아닌 행사 매대에 단독 진열 / 사진 촬영 불가 / POS 확인" value={draft.memo} onChange={(event) => update({ memo: event.target.value })} /></div></section>
     {saveMessage && <div className={`save-toast ${saveMessage.includes("실패") ? "danger-toast" : ""}`}>{saveMessage}</div>}
     <div className="item-action-fab">
+      <div className="item-progress-mini"><span style={{ width: `${storeItems.length ? Math.round((storeItems.filter((candidate) => candidate.status === "완료").length + (draft.status === "완료" && !storeItems.find((candidate) => candidate.id === draft.id && candidate.status === "완료") ? 1 : 0)) / storeItems.length * 100) : 0}%` }} /></div>
       <button type="button" onClick={saveAndList} disabled={isSaving}>목록</button>
       <button type="button" className="primary" onClick={handleSave} disabled={isSaving} aria-label="저장"><CheckCircle2 size={19} />{isSaving ? "저장 중" : "저장"}</button>
       <button type="button" onClick={saveAndNext} disabled={isSaving}>다음</button>

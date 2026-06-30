@@ -575,10 +575,24 @@ textarea { min-height: 110px; resize: vertical; }
   grid-template-columns: auto auto auto;
   gap: 7px;
   padding: 7px;
+  padding-top: 12px;
   border: 1px solid #dbe1e5;
   border-radius: 999px;
   background: rgba(255, 255, 255, .96);
   box-shadow: 0 12px 28px rgba(15, 23, 42, .22);
+}
+.item-progress-mini {
+  grid-column: 1 / -1;
+  height: 3px;
+  margin: -3px 10px 0;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #e2e8f0;
+}
+.item-progress-mini span {
+  display: block;
+  height: 100%;
+  background: #0f766e;
 }
 .item-action-fab button {
   min-height: 46px;
