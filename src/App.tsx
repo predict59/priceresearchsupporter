@@ -1,4 +1,4 @@
-import { Camera, CheckCircle2, ChevronDown, ChevronUp, Download, FileJson, Info as InfoIcon, MapPin, Menu, MoreVertical, Phone, RotateCcw, SlidersHorizontal, Search, Upload, X } from "lucide-react";
+import { Camera, CheckCircle2, ChevronDown, ChevronUp, Download, Info as InfoIcon, MapPin, Menu, MoreVertical, Phone, SlidersHorizontal, Search, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { clearAllData, deletePhoto, getItems, getPhotosByRegion, getPhotosByStore, getRegions, getSettings, getStores, importRegionData, now, putItem, putPhoto, putStore, saveParsedData, saveSettings, today, uid } from "./db";
 import { parseContactRows, parseSurveyWorkbook, mergeContacts, rebuildStoresAndRegions } from "./excel";
@@ -238,9 +238,9 @@ function App() {
           </button>
         </div>
         <div className="top-actions">
-          <button onClick={() => { setView("regions"); setMenuOpen(false); }}><RotateCcw size={16} />지역 선택</button>
+          <button onClick={() => { setView("regions"); setMenuOpen(false); }}>지역 선택</button>
           <button disabled={!currentRegion} onClick={() => { setView("validation"); setMenuOpen(false); }}>검증 보기</button>
-          <button onClick={() => { setView("backup"); setMenuOpen(false); }}><FileJson size={16} />백업/복원</button>
+          <button onClick={() => { setView("backup"); setMenuOpen(false); }}>백업/복원</button>
         </div>
       </header>
 
