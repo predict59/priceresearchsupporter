@@ -172,6 +172,11 @@ textarea { min-height: 110px; resize: vertical; }
   grid-template-columns: minmax(0, 1fr) auto;
 }
 .sticky-search .search { margin: 0; }
+.search input::placeholder {
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 700;
+}
 .tool-toggle { min-height: 44px; white-space: nowrap; }
 .tool-panel {
   background: #fff;
@@ -528,10 +533,28 @@ textarea { min-height: 110px; resize: vertical; }
   font-size: 18px;
   margin: 0 0 6px;
 }
-.info { display: grid; grid-template-columns: 130px 1fr; gap: 8px; }
-.info dt { font-weight: 800; color: #52616b; }
-.info dd { margin: 0; }
-.field-row { display: grid; grid-template-columns: 130px 1fr; gap: 10px; align-items: center; margin-bottom: 12px; }
+.info {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 7px 12px;
+}
+.info dt {
+  font-size: 13px;
+  font-weight: 900;
+  color: #64748b;
+}
+.info dd {
+  margin: 0;
+  color: #0f172a;
+  font-weight: 800;
+  word-break: break-word;
+}
+.field-row { display: grid; grid-template-columns: 120px 1fr; gap: 10px; align-items: center; margin-bottom: 12px; }
+.field-row > span {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 900;
+}
 .disabled-block {
   opacity: .58;
 }

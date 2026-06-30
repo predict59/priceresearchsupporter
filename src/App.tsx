@@ -115,6 +115,7 @@ async function resizePhoto(file: File) {
 
 function App() {
   const [view, setView] = useState<View>("upload");
+  const [isBooting, setIsBooting] = useState(true);
   const [settings, setSettingsState] = useState<AppSettings>({ defaultSurveyDate: today() });
   const [regions, setRegions] = useState<Region[]>([]);
   const [stores, setStores] = useState<SurveyStore[]>([]);
@@ -189,7 +190,7 @@ function App() {
   }
 
   useEffect(() => {
-    refresh();
+    refresh().finally(() => setIsBooting(false));
   }, []);
 
   useEffect(() => {
@@ -440,6 +441,16 @@ function App() {
         ? currentRegion ? `현재 지역: ${currentRegion}` : ""
         : "";
 
+  if (isBooting) {
+    return (
+      <div className="app">
+        <main className="page narrow">
+          <p className="notice">저장된 조사 데이터를 확인하는 중입니다.</p>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="app">
       <header className={`topbar ${menuOpen ? "menu-open" : ""}`}>
@@ -507,7 +518,7 @@ function App() {
       {view === "workspace" && currentRegion && (
         <main className="page">
           <div className="sticky-search workspace-search">
-            <SearchBox value={storeQuery} onChange={setStoreQuery} placeholder="마트명 / 업체명 / 주소 / 품목명 / 바코드" />
+            <SearchBox value={storeQuery} onChange={setStoreQuery} placeholder="업체명/주소명/품목명/품목코드/바코드" />
             <button className="tool-toggle" onClick={() => setWorkspaceToolsOpen((value) => !value)} aria-expanded={workspaceToolsOpen}>
               <SlidersHorizontal size={18} /> 필터 {workspaceToolsOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </button>
@@ -572,9 +583,16 @@ function App() {
             <h1>{selectedStore.storeName}</h1>
             <p>{selectedStore.storeAddress}</p>
             <h2>업체 전경사진</h2>
-            <PhotoInput label={selectedStore.frontPhotoId ? "업체사진" : "업체사진"} onFile={saveStorePhoto} />
-            {selectedStore.frontPhotoId && <button className="danger full-button store-photo-delete" onClick={removeStorePhoto}>지우기</button>}
-            <p className={selectedStore.frontPhotoId ? "ok" : "warn"}>촬영 상태: {selectedStore.frontPhotoId ? "촬영완료" : "미촬영"}</p>
+            <div className={`photo-slot ${selectedStore.frontPhotoId ? "uploaded" : ""}`}>
+              <div>
+                <strong>업체사진</strong>
+                <span>{selectedStore.frontPhotoId ? "업로드됨" : "미업로드"}</span>
+              </div>
+              <div className="photo-actions">
+                <PhotoInput label={selectedStore.frontPhotoId ? "다시 올리기" : "촬영/첨부"} onFile={saveStorePhoto} />
+                {selectedStore.frontPhotoId && <button className="danger" onClick={removeStorePhoto}>지우기</button>}
+              </div>
+            </div>
           </section>
           <Contacts items={storeItems} />
           <section className="panel">
@@ -963,6 +981,17 @@ function ItemEditor({ item, storeItems, photos, onPhoto, onDeletePhoto, onSave, 
     const currentIndex = storeItems.findIndex((candidate) => candidate.id === draft.id);
     return storeItems[currentIndex + 1]?.id;
   };
+  const appendMemo = (text: string) => {
+    const parts = draft.memo.split("/").map((part) => part.trim()).filter(Boolean);
+    if (parts.includes(text)) return draft.memo;
+    return parts.length ? `${parts.join(" / ")} / ${text}` : text;
+  };
+  const updatePosChecked = (value: string) => {
+    update({
+      posChecked: value as SurveyItem["posChecked"],
+      memo: value === "조회함" ? appendMemo("POS 확인") : draft.memo,
+    });
+  };
   const handleSave = async () => {
     setIsSaving(true);
     setSaveMessage("저장 중...");
@@ -1011,11 +1040,11 @@ function ItemEditor({ item, storeItems, photos, onPhoto, onDeletePhoto, onSave, 
   return <main className="page item-page"><section className="item-hero compact-hero"><div><h1 className="item-title"><span className="item-code">{draft.itemNo}</span><span>{draft.productName}</span></h1><Badge text={draft.status} /></div></section>
     <ItemContact item={draft} />
     <details className="panel" open><summary>① 업체 제시정보</summary><Info item={draft} /></details>
-    <section className="panel"><h2>② 실물 확인</h2><Choice label="정상진열" value={draft.normalDisplay} values={["O", "X"]} onChange={(value) => update({ normalDisplay: value as SurveyItem["normalDisplay"], photoCase: value === "X" ? "POS_ONLY" : value === "O" ? "NORMAL" : "", specMatch: value === "X" ? "" : draft.specMatch, barcodeMatch: value === "X" ? "" : draft.barcodeMatch, barcodeRegistered: value === "O" ? "" : draft.barcodeRegistered, abnormalStatus: value === "O" ? "" : draft.abnormalStatus, posChecked: value === "O" ? "" : draft.posChecked, posPrice: value === "O" ? null : draft.posPrice })} /><Choice label="규격일치" disabled={draft.normalDisplay !== "O"} value={draft.normalDisplay === "O" ? draft.specMatch : ""} values={["O", "X", "-"]} onChange={(value) => update({ specMatch: value as SurveyItem["specMatch"] })} /><Choice label="바코드일치" disabled={draft.normalDisplay !== "O"} value={draft.normalDisplay === "O" ? draft.barcodeMatch : ""} values={["O", "X", "-"]} onChange={(value) => update({ barcodeMatch: value as SurveyItem["barcodeMatch"] })} /></section>
-    <section className={`panel ${draft.normalDisplay === "X" ? "" : "disabled-block"}`}><h2>③ 진열상태</h2><Choice label="바코드 등록 여부" disabled={draft.normalDisplay !== "X"} value={draft.normalDisplay === "X" ? draft.barcodeRegistered : ""} values={["O", "X"]} onChange={(value) => update({ barcodeRegistered: value as SurveyItem["barcodeRegistered"] })} /><Choice label="상태" disabled={draft.normalDisplay !== "X"} value={draft.normalDisplay === "X" ? draft.abnormalStatus : ""} values={["미진열", "미판매"]} onChange={(value) => update({ abnormalStatus: value as SurveyItem["abnormalStatus"] })} /><Choice label="POS 조회 여부" disabled={draft.normalDisplay !== "X"} value={draft.normalDisplay === "X" ? draft.posChecked : ""} values={["조회함", "조회불가", "미조회"]} onChange={(value) => update({ posChecked: value as SurveyItem["posChecked"] })} /><Money label="POS 확인 가격" disabled={draft.normalDisplay !== "X"} value={draft.normalDisplay === "X" ? draft.posPrice : null} onChange={(value) => update({ posPrice: num(value) })} /></section>
+    <section className="panel"><h2>② 실물 확인</h2><Choice label="정상진열" value={draft.normalDisplay} values={["O", "X"]} onChange={(value) => update({ normalDisplay: value as SurveyItem["normalDisplay"], photoCase: value === "X" ? "POS_ONLY" : value === "O" ? "NORMAL" : "", specMatch: value === "X" ? "" : draft.specMatch, barcodeMatch: value === "X" ? "" : draft.barcodeMatch, barcodeRegistered: value === "O" ? "" : draft.barcodeRegistered, abnormalStatus: value === "O" ? "" : draft.abnormalStatus, posChecked: value === "O" ? "" : draft.posChecked, posPrice: null })} /><Choice label="규격일치" disabled={draft.normalDisplay !== "O"} value={draft.normalDisplay === "O" ? draft.specMatch : ""} values={["O", "X"]} onChange={(value) => update({ specMatch: value as SurveyItem["specMatch"] })} /><Choice label="바코드일치" disabled={draft.normalDisplay !== "O"} value={draft.normalDisplay === "O" ? draft.barcodeMatch : ""} values={["O", "X"]} onChange={(value) => update({ barcodeMatch: value as SurveyItem["barcodeMatch"] })} /></section>
+    <section className={`panel ${draft.normalDisplay === "X" ? "" : "disabled-block"}`}><h2>③ 상태</h2><Choice label="바코드 등록 여부" disabled={draft.normalDisplay !== "X"} value={draft.normalDisplay === "X" ? draft.barcodeRegistered : ""} values={["O", "X"]} onChange={(value) => update({ barcodeRegistered: value as SurveyItem["barcodeRegistered"] })} /><Choice label="판매여부" disabled={draft.normalDisplay !== "X"} value={draft.normalDisplay === "X" ? draft.abnormalStatus : ""} values={["미진열", "미판매"]} onChange={(value) => update({ abnormalStatus: value as SurveyItem["abnormalStatus"] })} /><Choice label="POS 조회 여부" disabled={draft.normalDisplay !== "X"} value={draft.normalDisplay === "X" ? draft.posChecked : ""} values={["조회함", "조회불가"]} onChange={updatePosChecked} /></section>
     <section className="panel"><h2>④ 사진자료</h2><p className="photo-rule">업체사진: {photos.some((photo) => photo.type === "STORE_FRONT") ? "촬영완료" : "미촬영"}</p>{!draft.normalDisplay && <p className="notice">먼저 ② 실물 확인에서 정상진열 O/X를 선택하면 필요한 사진 입력칸이 표시됩니다.</p>}{photoMessage && <p className="ok upload-message">{photoMessage}</p>}{draft.normalDisplay === "O" && <><PhotoSlot id="photo-product-display" label="제품진열사진" photo={itemPhotos.display} onFile={(file) => upload("PRODUCT_DISPLAY", file, "제품진열사진")} onDelete={onDeletePhoto} /><PhotoSlot id="photo-product-info" label="제품정보/후면/바코드사진" photo={itemPhotos.info} onFile={(file) => upload("PRODUCT_INFO_BARCODE", file, "제품정보/후면/바코드사진")} onDelete={onDeletePhoto} /></>}{draft.normalDisplay === "X" && <PhotoSlot id="photo-pos-receipt" label="POS/영수증사진" photo={itemPhotos.pos} onFile={(file) => upload("POS_RECEIPT", file, "POS/영수증사진")} onDelete={onDeletePhoto} />}{missing.length > 0 && <p className="warn">사진누락: {missing.join(", ")}</p>}</section>
     <section className="panel"><h2>⑤ 가격</h2><Money label="정상가" value={draft.normalPrice} onChange={(value) => update({ normalPrice: num(value) })} /><Choice label="할인 여부" value={draft.hasDiscount === null ? "" : draft.hasDiscount ? "할인 있음" : "할인 없음"} values={["할인 없음", "할인 있음"]} onChange={(value) => update({ hasDiscount: value === "할인 있음" })} /><div className={draft.hasDiscount === false ? "disabled-block" : ""}><Money label="할인가" value={draft.discountPrice} disabled={draft.hasDiscount === false} onChange={(value) => update({ discountPrice: num(value) })} /><label>할인 시작일<input type="date" disabled={draft.hasDiscount === false} value={draft.discountStartDate} onChange={(event) => update({ discountStartDate: event.target.value })} /></label><label>할인 종료일<input type="date" disabled={draft.hasDiscount === false} value={draft.discountEndDate} onChange={(event) => update({ discountEndDate: event.target.value })} /></label><DiscountPeriod disabled={draft.hasDiscount === false} value={draft.discountType} oral={draft.discountOral ?? draft.discountType.includes("구두")} onChange={(discountType, discountOral) => update({ discountType, discountOral })} /></div>{draft.basePrice !== null && draft.normalPrice !== null && <p className="notice">참고: 정상가가 기준가격보다 {draft.normalPrice < draft.basePrice ? "낮습니다" : draft.normalPrice > draft.basePrice ? "높습니다" : "같습니다"}.</p>}</section>
-    <section className="panel"><h2>⑥ 비정상 진열 / 비고</h2><div className="abnormal-block"><Choice label="비정상진열" value={draft.abnormalDisplay ?? ""} values={["O", "X"]} onChange={(value) => update({ abnormalDisplay: value as SurveyItem["abnormalDisplay"] })} />{draft.abnormalDisplay === "O" && <p className="small-help warn">비정상진열이면 어떤 위치에 어떻게 진열되어 있었는지 아래 비고에 적어주세요.</p>}</div><div className="memo-block"><h3>비고</h3><p className="small-help">자주 쓰는 문구를 누르면 비고에 추가됩니다.</p><div className="chips memo-chips">{["가격표 수기 작성", "POS 확인", "규격 불일치", "바코드 불일치", "장기 할인", "구두 확인", "비정상진열", "미진열", "미판매", "폐점", "품절", "기타"].map((text) => <button key={text} onClick={() => update({ memo: draft.memo ? `${draft.memo} / ${text}` : text })}>{text}</button>)}</div><textarea placeholder="예: 같은 카테고리 매대가 아닌 행사 매대에 단독 진열 / 사진 촬영 불가 / POS 확인" value={draft.memo} onChange={(event) => update({ memo: event.target.value })} /></div></section>
+    <section className="panel"><h2>⑥ 특이사항</h2><div className="abnormal-block"><Choice label="비정상진열" value={draft.abnormalDisplay ?? ""} values={["O", "X"]} onChange={(value) => update({ abnormalDisplay: value as SurveyItem["abnormalDisplay"] })} />{draft.abnormalDisplay === "O" && <p className="small-help warn">비정상진열이면 어떤 위치에 어떻게 진열되어 있었는지 아래 비고에 적어주세요.</p>}</div><div className="memo-block"><h3>비고</h3><p className="small-help">자주 쓰는 문구를 누르면 비고에 추가됩니다.</p><div className="chips memo-chips">{["폐점", "품절", "재고 소진", "재입고 예정", "1+1 행사", "임시휴업", "판매처 미협조"].map((text) => <button key={text} onClick={() => update({ memo: appendMemo(text) })}>{text}</button>)}</div><textarea placeholder="예: 판매처 미협조 / 재입고 예정 / 사진 촬영 불가" value={draft.memo} onChange={(event) => update({ memo: event.target.value })} /></div></section>
     {saveMessage && <div className={`save-toast ${saveMessage.includes("실패") ? "danger-toast" : ""}`}>{saveMessage}</div>}
     <div className="item-action-fab">
       <div className="item-progress-mini"><span style={{ width: `${storeItems.length ? Math.round((storeItems.filter((candidate) => candidate.status === "완료").length + (draft.status === "완료" && !storeItems.find((candidate) => candidate.id === draft.id && candidate.status === "완료") ? 1 : 0)) / storeItems.length * 100) : 0}%` }} /></div>
