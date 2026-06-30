@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { clearAllData, deletePhoto, getItems, getPhotosByRegion, getPhotosByStore, getRegions, getSettings, getStores, importRegionData, now, putItem, putPhoto, putStore, saveParsedData, saveSettings, today, uid } from "./db";
 import { parseContactRows, parseSurveyWorkbook, mergeContacts, rebuildStoresAndRegions } from "./excel";
 import { dataUrlToBlob, exportBackup, exportRegionExcel, exportRegionZip } from "./exporters";
-import { mapSearchAddress, photoCaseOf, requiredPhotoLabels, summarize } from "./logic";
+import { mapSearchAddress, requiredPhotoLabels, summarize } from "./logic";
 import type { AppSettings, BackupPayload, PhotoType, Region, RegionStats, SurveyItem, SurveyPhoto, SurveyStore } from "./types";
 
 type View = "upload" | "regions" | "workspace" | "store" | "items" | "item" | "backup" | "validation";
@@ -17,7 +17,10 @@ const mapLinks = (address: string) => [
 ];
 
 const emptyStats: RegionStats = { total: 0, completed: 0, inProgress: 0, notStarted: 0, photoMissing: 0 };
-const num = (value: string) => (value === "" ? null : Number(value));
+const num = (value: string) => {
+  const digits = value.replace(/\D/g, "");
+  return digits === "" ? null : Number(digits);
+};
 const EXCEL_ACCEPT = ".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream";
 
 function App() {
@@ -297,7 +300,7 @@ function App() {
                   <h2>{region.name}</h2>
                   <p className="area-summary">{region.areaSummary || region.city || "-"}</p>
                   <p className="muted">담당부서: {region.department || "-"} · 지역: {region.name}</p>
-                  <Stats stats={summary.total ? summary : emptyStats} />
+                  <Stats stats={summary.total ? summary : emptyStats} totalLabel="업체 전체" />
                   <div className="region-actions">
                     <button className="primary" onClick={() => chooseRegion(region.name)}>작업</button>
                     <button title="엑셀 내보내기" onClick={() => doExportExcel(region.name)}><Download size={16} />엑셀</button>
@@ -344,7 +347,7 @@ function App() {
               const ownStats = summarize(ownItems, ownPhotos);
               if (filter !== "전체" && filter !== "사진누락" && !ownItems.some((item) => item.status === filter)) return null;
               if (filter === "사진누락" && ownStats.photoMissing === 0) return null;
-              return <StoreCard key={store.id} store={store} stats={ownStats} items={ownItems} onOpen={() => openStore(store)} onContacts={() => setContactStoreId(store.id)} />;
+              return <StoreCard key={store.id} store={store} stats={ownStats} items={ownItems} focused={selectedStoreId === store.id} onOpen={() => openStore(store)} onContacts={() => setContactStoreId(store.id)} />;
             })}
           </div>
         </main>
@@ -377,7 +380,7 @@ function App() {
           </div>
           {itemToolsOpen && (
             <section className="tool-panel">
-              <Stats stats={summarize(storeItems, photos.filter((photo) => photo.storeId === selectedStore.id))} />
+              <Stats stats={summarize(storeItems, photos.filter((photo) => photo.storeId === selectedStore.id))} totalLabel="품목 전체" />
               <FilterBar filter={filter} setFilter={setFilter} />
             </section>
           )}
@@ -467,17 +470,17 @@ function FilterBar({ filter, setFilter }: { filter: Filter; setFilter: (filter: 
   return <div className="segmented">{(["전체", "미조사", "조사중", "완료", "사진누락"] as Filter[]).map((value) => <button className={filter === value ? "active" : ""} key={value} onClick={() => setFilter(value)}>{value}</button>)}</div>;
 }
 
-function Stats({ stats }: { stats: RegionStats }) {
+function Stats({ stats, totalLabel = "전체" }: { stats: RegionStats; totalLabel?: string }) {
   return (
     <div className="stats">
       <div className="stats-line">
-        <strong>전체 {stats.total.toLocaleString()}개</strong>
+        <strong>{totalLabel} {stats.total.toLocaleString()}개</strong>
         <span>완료 {stats.completed.toLocaleString()}</span>
         <span>조사중 {stats.inProgress.toLocaleString()}</span>
         <span>미조사 {stats.notStarted.toLocaleString()}</span>
       </div>
       <div className="stats-progress"><span style={{ width: `${stats.total ? Math.round((stats.completed / stats.total) * 100) : 0}%` }} /></div>
-      <div className="stats-missing">사진누락 {stats.photoMissing.toLocaleString()}개</div>
+      <div className={stats.photoMissing > 0 ? "stats-missing" : "stats-photo-ok"}>{stats.photoMissing > 0 ? `사진누락 ${stats.photoMissing.toLocaleString()}개` : "사진"}</div>
     </div>
   );
 }
@@ -486,12 +489,12 @@ function Badge({ text }: { text: string }) {
   return <span className={`badge badge-${text}`}>{text}</span>;
 }
 
-function StoreCard({ store, stats, items, onOpen, onContacts }: { store: SurveyStore; stats: RegionStats; items: SurveyItem[]; onOpen: () => void; onContacts: () => void }) {
+function StoreCard({ store, stats, items, focused, onOpen, onContacts }: { store: SurveyStore; stats: RegionStats; items: SurveyItem[]; focused: boolean; onOpen: () => void; onContacts: () => void }) {
   const completed = items.filter((item) => item.status === "완료");
   const latestSurveyDate = completed.map((item) => item.surveyDate).filter(Boolean).sort().at(-1) ?? "-";
   const percent = stats.total ? Math.round((stats.completed / stats.total) * 100) : 0;
   return (
-    <article className="card store-card">
+    <article className={`card store-card ${focused ? "focused" : ""}`}>
       <div className="card-head">
         <div>
           <h2>{store.storeName}</h2>
@@ -513,7 +516,7 @@ function StoreCard({ store, stats, items, onOpen, onContacts }: { store: SurveyS
       </div>
       <div className="store-meta">
         <span className={`store-photo-badge ${store.frontPhotoId ? "done" : ""}`}>업체사진</span>
-        {stats.photoMissing > 0 && <span className="store-missing">사진누락 {stats.photoMissing.toLocaleString()}개</span>}
+        <span className={stats.photoMissing > 0 ? "store-missing" : "store-photo-ok"}>{stats.photoMissing > 0 ? `사진누락 ${stats.photoMissing.toLocaleString()}개` : "사진"}</span>
         <span className="store-date">조사일: {latestSurveyDate}</span>
       </div>
       <div className="card-actions">
@@ -621,19 +624,10 @@ function ItemEditor({ item, storeItems, photos, onPhoto, onDeletePhoto, onSave, 
   useEffect(() => setDraft(item), [item.id]);
   const update = (patch: Partial<SurveyItem>) => setDraft((old) => ({ ...old, ...patch, status: old.status === "미조사" ? "조사중" : old.status }));
   const missing = requiredPhotoLabels(draft, photos);
-  const photoCase = photoCaseOf(draft);
   const itemPhotos = {
     display: photos.find((photo) => photo.itemId === draft.id && photo.type === "PRODUCT_DISPLAY"),
     info: photos.find((photo) => photo.itemId === draft.id && photo.type === "PRODUCT_INFO_BARCODE"),
     pos: photos.find((photo) => photo.itemId === draft.id && photo.type === "POS_RECEIPT"),
-  };
-  const nextBlank = () => {
-    const target = photoCase === "POS_ONLY"
-      ? (!itemPhotos.pos ? "photo-pos-receipt" : "")
-      : photoCase === "NORMAL"
-        ? (!itemPhotos.display ? "photo-product-display" : !itemPhotos.info ? "photo-product-info" : "")
-        : "";
-    if (target) document.getElementById(`${target}-slot`)?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
   const upload = async (type: PhotoType, file: File, label: string) => {
     await onPhoto(draft, type, file);
@@ -700,8 +694,8 @@ function ItemEditor({ item, storeItems, photos, onPhoto, onDeletePhoto, onSave, 
     <details className="panel" open><summary>① 업체 제시정보</summary><Info item={draft} /></details>
     <section className="panel"><h2>② 실물 확인</h2><Choice label="정상진열" value={draft.normalDisplay} values={["O", "X"]} onChange={(value) => update({ normalDisplay: value as SurveyItem["normalDisplay"], photoCase: value === "X" ? "POS_ONLY" : value === "O" ? "NORMAL" : "" })} /><Choice label="규격일치" value={draft.specMatch} values={["O", "X", "-"]} onChange={(value) => update({ specMatch: value as SurveyItem["specMatch"] })} /><Choice label="바코드일치" value={draft.barcodeMatch} values={["O", "X", "-"]} onChange={(value) => update({ barcodeMatch: value as SurveyItem["barcodeMatch"] })} /></section>
     {draft.normalDisplay === "X" && <section className="panel"><h2>③ 진열상태</h2><Choice label="바코드 등록 여부" value={draft.barcodeRegistered} values={["O", "X"]} onChange={(value) => update({ barcodeRegistered: value as SurveyItem["barcodeRegistered"] })} /><Choice label="상태" value={draft.abnormalStatus} values={["미진열", "미판매"]} onChange={(value) => update({ abnormalStatus: value as SurveyItem["abnormalStatus"] })} /><Choice label="POS 조회 여부" value={draft.posChecked} values={["조회함", "조회불가", "미조회"]} onChange={(value) => update({ posChecked: value as SurveyItem["posChecked"] })} /><Money label="POS 확인 가격" value={draft.posPrice} onChange={(value) => update({ posPrice: num(value) })} /></section>}
-    <section className="panel"><h2>④ 사진자료</h2><p className="photo-rule">업체사진: {photos.some((photo) => photo.type === "STORE_FRONT") ? "촬영완료" : "미촬영"}</p>{!draft.normalDisplay && <p className="notice">먼저 ② 실물 확인에서 정상진열 O/X를 선택하면 필요한 사진 입력칸이 표시됩니다.</p>}{photoMessage && <p className="ok upload-message">{photoMessage}</p>}{draft.normalDisplay === "O" && <><PhotoSlot id="photo-product-display" label="제품진열사진" photo={itemPhotos.display} onFile={(file) => upload("PRODUCT_DISPLAY", file, "제품진열사진")} onDelete={onDeletePhoto} /><PhotoSlot id="photo-product-info" label="제품정보/후면/바코드사진" photo={itemPhotos.info} onFile={(file) => upload("PRODUCT_INFO_BARCODE", file, "제품정보/후면/바코드사진")} onDelete={onDeletePhoto} /></>}{draft.normalDisplay === "X" && <PhotoSlot id="photo-pos-receipt" label="POS/영수증사진" photo={itemPhotos.pos} onFile={(file) => upload("POS_RECEIPT", file, "POS/영수증사진")} onDelete={onDeletePhoto} />}<button className="row-button" onClick={nextBlank} disabled={!draft.normalDisplay}>다음 빈칸으로 이동</button>{missing.length > 0 && <p className="warn">사진누락: {missing.join(", ")}</p>}</section>
-    <section className="panel"><h2>⑤ 가격 판단</h2><Money label="정상가" value={draft.normalPrice} onChange={(value) => update({ normalPrice: num(value) })} /><Choice label="할인 여부" value={draft.hasDiscount === null ? "" : draft.hasDiscount ? "할인 있음" : "할인 없음"} values={["할인 없음", "할인 있음"]} onChange={(value) => update({ hasDiscount: value === "할인 있음" })} /><Money label="할인가" value={draft.discountPrice} onChange={(value) => update({ discountPrice: num(value) })} /><label>할인 시작일<input type="date" value={draft.discountStartDate} onChange={(event) => update({ discountStartDate: event.target.value })} /></label><label>할인 종료일<input type="date" value={draft.discountEndDate} onChange={(event) => update({ discountEndDate: event.target.value })} /></label><DiscountPeriod value={draft.discountType} oral={draft.discountOral ?? draft.discountType.includes("구두")} onChange={(discountType, discountOral) => update({ discountType, discountOral })} />{draft.basePrice !== null && draft.normalPrice !== null && <p className="notice">참고: 정상가가 기준가격보다 {draft.normalPrice < draft.basePrice ? "낮습니다" : draft.normalPrice > draft.basePrice ? "높습니다" : "같습니다"}.</p>}</section>
+    <section className="panel"><h2>④ 사진자료</h2><p className="photo-rule">업체사진: {photos.some((photo) => photo.type === "STORE_FRONT") ? "촬영완료" : "미촬영"}</p>{!draft.normalDisplay && <p className="notice">먼저 ② 실물 확인에서 정상진열 O/X를 선택하면 필요한 사진 입력칸이 표시됩니다.</p>}{photoMessage && <p className="ok upload-message">{photoMessage}</p>}{draft.normalDisplay === "O" && <><PhotoSlot id="photo-product-display" label="제품진열사진" photo={itemPhotos.display} onFile={(file) => upload("PRODUCT_DISPLAY", file, "제품진열사진")} onDelete={onDeletePhoto} /><PhotoSlot id="photo-product-info" label="제품정보/후면/바코드사진" photo={itemPhotos.info} onFile={(file) => upload("PRODUCT_INFO_BARCODE", file, "제품정보/후면/바코드사진")} onDelete={onDeletePhoto} /></>}{draft.normalDisplay === "X" && <PhotoSlot id="photo-pos-receipt" label="POS/영수증사진" photo={itemPhotos.pos} onFile={(file) => upload("POS_RECEIPT", file, "POS/영수증사진")} onDelete={onDeletePhoto} />}{missing.length > 0 && <p className="warn">사진누락: {missing.join(", ")}</p>}</section>
+    <section className="panel"><h2>⑤ 가격</h2><Money label="정상가" value={draft.normalPrice} onChange={(value) => update({ normalPrice: num(value) })} /><Choice label="할인 여부" value={draft.hasDiscount === null ? "" : draft.hasDiscount ? "할인 있음" : "할인 없음"} values={["할인 없음", "할인 있음"]} onChange={(value) => update({ hasDiscount: value === "할인 있음" })} /><div className={draft.hasDiscount === false ? "disabled-block" : ""}><Money label="할인가" value={draft.discountPrice} disabled={draft.hasDiscount === false} onChange={(value) => update({ discountPrice: num(value) })} /><label>할인 시작일<input type="date" disabled={draft.hasDiscount === false} value={draft.discountStartDate} onChange={(event) => update({ discountStartDate: event.target.value })} /></label><label>할인 종료일<input type="date" disabled={draft.hasDiscount === false} value={draft.discountEndDate} onChange={(event) => update({ discountEndDate: event.target.value })} /></label><DiscountPeriod disabled={draft.hasDiscount === false} value={draft.discountType} oral={draft.discountOral ?? draft.discountType.includes("구두")} onChange={(discountType, discountOral) => update({ discountType, discountOral })} /></div>{draft.basePrice !== null && draft.normalPrice !== null && <p className="notice">참고: 정상가가 기준가격보다 {draft.normalPrice < draft.basePrice ? "낮습니다" : draft.normalPrice > draft.basePrice ? "높습니다" : "같습니다"}.</p>}</section>
     <section className="panel"><h2>⑥ 비정상 진열 / 비고</h2><div className="abnormal-block"><Choice label="비정상진열" value={draft.abnormalDisplay ?? ""} values={["O", "X"]} onChange={(value) => update({ abnormalDisplay: value as SurveyItem["abnormalDisplay"] })} />{draft.abnormalDisplay === "O" && <p className="small-help warn">비정상진열이면 어떤 위치에 어떻게 진열되어 있었는지 아래 비고에 적어주세요.</p>}</div><div className="memo-block"><h3>비고</h3><p className="small-help">자주 쓰는 문구를 누르면 비고에 추가됩니다.</p><div className="chips memo-chips">{["가격표 수기 작성", "POS 확인", "규격 불일치", "바코드 불일치", "장기 할인", "구두 확인", "비정상진열", "미진열", "미판매", "폐점", "품절", "기타"].map((text) => <button key={text} onClick={() => update({ memo: draft.memo ? `${draft.memo} / ${text}` : text })}>{text}</button>)}</div><textarea placeholder="예: 같은 카테고리 매대가 아닌 행사 매대에 단독 진열 / 사진 촬영 불가 / POS 확인" value={draft.memo} onChange={(event) => update({ memo: event.target.value })} /></div></section>
     {saveMessage && <div className={`save-toast ${saveMessage.includes("실패") ? "danger-toast" : ""}`}>{saveMessage}</div>}
     <div className="item-action-fab">
@@ -731,17 +725,17 @@ function Info({ item }: { item: SurveyItem }) {
   return <dl className="info"><dt>업체명</dt><dd>{item.companyName}</dd><dt>업체연락처</dt><dd>{item.companyTel}</dd><dt>마트명</dt><dd>{item.martName}</dd><dt>바코드</dt><dd>{item.barcode}</dd><dt>물품명</dt><dd>{item.productName}</dd><dt>규격</dt><dd>{item.spec}</dd><dt>기준가격</dt><dd>{item.basePrice?.toLocaleString() ?? "-"}</dd></dl>;
 }
 
-function DiscountPeriod({ value, oral, onChange }: { value: string; oral: boolean; onChange: (value: string, oral: boolean) => void }) {
+function DiscountPeriod({ value, oral, disabled, onChange }: { value: string; oral: boolean; disabled?: boolean; onChange: (value: string, oral: boolean) => void }) {
   const normalized = value.replace("구두", "");
   return (
     <div className="field-row">
       <span>기간구분</span>
       <div className="period-control">
         <div className="segmented">
-          <button className={normalized === "①" ? "active" : ""} onClick={() => onChange(normalized === "①" ? "" : "①", oral)}>① 31일 이내</button>
-          <button className={normalized === "②" ? "active" : ""} onClick={() => onChange(normalized === "②" ? "" : "②", oral)}>② 32일 이상</button>
+          <button disabled={disabled} className={normalized === "①" ? "active" : ""} onClick={() => onChange(normalized === "①" ? "" : "①", oral)}>① 31일 이내</button>
+          <button disabled={disabled} className={normalized === "②" ? "active" : ""} onClick={() => onChange(normalized === "②" ? "" : "②", oral)}>② 32일 이상</button>
         </div>
-        <label className="inline-check"><input type="checkbox" checked={oral} onChange={(event) => onChange(normalized, event.target.checked)} /> 구두 확인</label>
+        <label className="inline-check"><input type="checkbox" disabled={disabled} checked={oral} onChange={(event) => onChange(normalized, event.target.checked)} /> 구두 확인</label>
       </div>
     </div>
   );
@@ -751,8 +745,8 @@ function Choice({ label, value, values, onChange }: { label: string; value: stri
   return <div className="field-row"><span>{label}</span><div className="segmented">{values.map((candidate) => <button className={value === candidate ? "active" : ""} key={candidate} onClick={() => onChange(value === candidate ? "" : candidate)}>{candidate}</button>)}</div></div>;
 }
 
-function Money({ label, value, onChange }: { label: string; value: number | null; onChange: (value: string) => void }) {
-  return <label>{label}<input inputMode="numeric" value={value ?? ""} onChange={(event) => onChange(event.target.value)} placeholder="원" /></label>;
+function Money({ label, value, disabled, onChange }: { label: string; value: number | null; disabled?: boolean; onChange: (value: string) => void }) {
+  return <label>{label}<input inputMode="numeric" pattern="[0-9]*" disabled={disabled} value={typeof value === "number" && Number.isFinite(value) ? value : ""} onChange={(event) => onChange(event.target.value.replace(/\D/g, ""))} placeholder="원" /></label>;
 }
 
 function Validation({ title, items, open }: { title: string; items: SurveyItem[]; open: (id: string) => void }) {

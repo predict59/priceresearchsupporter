@@ -233,6 +233,16 @@ textarea { min-height: 110px; resize: vertical; }
   font-size: 13px;
   font-weight: 900;
 }
+.stats-photo-ok {
+  justify-self: start;
+  border-radius: 999px;
+  padding: 4px 9px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  font-size: 13px;
+  font-weight: 900;
+}
 .badge {
   border-radius: 999px;
   padding: 5px 9px;
@@ -430,6 +440,12 @@ textarea { min-height: 110px; resize: vertical; }
   gap: 10px;
   align-items: center;
 }
+.compact-hero > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
 .compact-hero h1 {
   font-size: 18px;
   margin: 0 0 6px;
@@ -438,6 +454,13 @@ textarea { min-height: 110px; resize: vertical; }
 .info dt { font-weight: 800; color: #52616b; }
 .info dd { margin: 0; }
 .field-row { display: grid; grid-template-columns: 130px 1fr; gap: 10px; align-items: center; margin-bottom: 12px; }
+.disabled-block {
+  opacity: .48;
+}
+.disabled-block input,
+.disabled-block button {
+  cursor: not-allowed;
+}
 .period-control { display: grid; gap: 8px; }
 .inline-check {
   display: flex;
@@ -621,7 +644,8 @@ textarea { min-height: 110px; resize: vertical; }
   font-weight: 800;
 }
 .store-photo-badge,
-.store-missing {
+.store-missing,
+.store-photo-ok {
   border-radius: 999px;
   padding: 4px 9px;
 }
@@ -639,9 +663,18 @@ textarea { min-height: 110px; resize: vertical; }
   background: #fff1f2;
   color: #b91c1c;
 }
+.store-photo-ok {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
 .store-date {
   grid-column: 3;
   justify-self: end;
+}
+.store-card.focused {
+  border-color: #0f766e;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, .12);
 }
 .full-button { width: 100%; }
 .card-actions {
