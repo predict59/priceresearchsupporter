@@ -9,7 +9,7 @@ import type { AppSettings, BackupPayload, PhotoType, Region, RegionStats, StoreO
 
 type View = "upload" | "regions" | "workspace" | "store" | "items" | "item" | "backup" | "validation";
 type Filter = "전체" | "미완료" | "미조사" | "조사중" | "완료" | "사진누락";
-type StoreSort = "방문순서" | "주소순" | "품목 많은 순" | "미완료 많은 순" | "사진누락 많은 순";
+type StoreSort = "임의 지정 순" | "주소순" | "품목 많은 순" | "미완료 많은 순" | "사진누락 많은 순";
 type ConfirmState = {
   title: string;
   message: string;
@@ -33,6 +33,7 @@ const EXCEL_ACCEPT = ".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocum
 const PHOTO_MAX_EDGE = 1280;
 const PHOTO_JPEG_QUALITY = 0.72;
 const PRICE_DIFF_WARN_PERCENT = 30;
+const TARGET_MAP_URL = "https://www.google.com/maps/d/u/1/viewer?mid=1ej99Lo6WS4GROBCQPr0a66MhQR_vXuM&ll=37.49945198941339%2C127.04262669775987&z=14";
 const appendMemoText = (memo: string, text: string) => {
   const parts = memo.split("/").map((part) => part.trim()).filter(Boolean);
   if (parts.includes(text)) return memo;
@@ -193,7 +194,7 @@ function App() {
     return [...regionStores].sort((a, b) => {
       const as = statsOf(a.id);
       const bs = statsOf(b.id);
-      if (storeSort === "방문순서") return storeVisitCompare(a, b);
+      if (storeSort === "임의 지정 순") return storeVisitCompare(a, b);
       if (storeSort === "품목 많은 순") return bs.total - as.total;
       if (storeSort === "사진누락 많은 순") return bs.photoMissing - as.photoMissing;
       if (storeSort === "주소순") return `${a.storeAddress} ${a.storeName}`.localeCompare(`${b.storeAddress} ${b.storeName}`, "ko");
@@ -259,6 +260,13 @@ function App() {
       setDragStoreId("");
     }
   }, [view]);
+
+  useEffect(() => {
+    if (storeSort !== "임의 지정 순") {
+      setOrderEditing(false);
+      setDragStoreId("");
+    }
+  }, [storeSort]);
 
   useEffect(() => {
     if (view !== "workspace" || !selectedStoreId) return;
@@ -676,8 +684,11 @@ function App() {
           <SearchBox value={regionQuery} onChange={setRegionQuery} placeholder="지역명 검색" />
           {currentRegion && regions.some((region) => region.name === currentRegion) && (
             <div className="recent-region">
-              <span>최근 지역</span>
-              <button onClick={() => chooseRegion(currentRegion)}>{currentRegion}</button>
+              <div>
+                <span>최근 지역</span>
+                <button onClick={() => chooseRegion(currentRegion)}>{currentRegion}</button>
+              </div>
+              <a className="mini-map-link" target="_blank" href={TARGET_MAP_URL}>조사처 전체지도</a>
             </div>
           )}
           <div className="grid">
@@ -713,25 +724,23 @@ function App() {
           {workspaceToolsOpen && (
             <section className="tool-panel">
               <FilterBar filter={filter} setFilter={setFilter} />
-              <label className="sort-control">정렬
+              <label className="sort-control sort-only">
                 <select value={storeSort} onChange={(event) => setStoreSort(event.target.value as StoreSort)}>
-                  <option>방문순서</option>
+                  <option>임의 지정 순</option>
                   <option>주소순</option>
                   <option>미완료 많은 순</option>
                   <option>품목 많은 순</option>
                   <option>사진누락 많은 순</option>
                 </select>
               </label>
-              <button
-                className={`order-edit-toggle ${orderEditing ? "active" : ""}`}
-                onClick={() => {
-                  setOrderEditing((value) => !value);
-                  setStoreSort("방문순서");
-                }}
-              >
-                순서 편집 {orderEditing ? "끄기" : "켜기"}
-              </button>
-              <a className="map-ref" target="_blank" href="https://www.google.com/maps/d/u/1/viewer?mid=1ej99Lo6WS4GROBCQPr0a66MhQR_vXuM&ll=37.49945198941339%2C127.04262669775987&z=14">조사대상 참고 지도 열기</a>
+              {storeSort === "임의 지정 순" && (
+                <button
+                  className={`order-edit-toggle ${orderEditing ? "active" : ""}`}
+                  onClick={() => setOrderEditing((value) => !value)}
+                >
+                  순서 편집
+                </button>
+              )}
             </section>
           )}
           <div className="list">
