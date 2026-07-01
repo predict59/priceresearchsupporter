@@ -1304,17 +1304,18 @@ textarea { min-height: 110px; resize: vertical; }
   align-items: start;
 }
 .store-card-title {
-  display: flex;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   gap: 6px;
   min-width: 0;
 }
 .store-name-text {
   min-width: 0;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  display: block;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   line-height: 1.32;
 }
 .card-menu { position: relative; }

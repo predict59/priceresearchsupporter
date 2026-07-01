@@ -1378,7 +1378,12 @@ function ItemEditor({ item, storeItems, photos, onPhoto, onDeletePhoto, onSave, 
         return { type: diff < 0 || percent >= PRICE_DIFF_WARN_PERCENT ? "warn" : "ok", messages };
       })()
     : undefined;
+  const storeClosedLocked = draft.memo.includes("판매처 폐점") || draft.memo.includes("임시휴업");
   const handleSave = async () => {
+    if (storeClosedLocked) {
+      setSaveMessage("마트 상태 처리 품목은 개별 저장할 수 없습니다.");
+      return;
+    }
     setIsSaving(true);
     setSaveMessage("저장 중...");
     try {
@@ -1449,7 +1454,7 @@ function ItemEditor({ item, storeItems, photos, onPhoto, onDeletePhoto, onSave, 
     <div className="item-action-fab">
       <div className="item-progress-mini"><span style={{ width: `${storeItems.length ? Math.round((storeItems.filter((candidate) => candidate.status === "완료").length + (draft.status === "완료" && !storeItems.find((candidate) => candidate.id === draft.id && candidate.status === "완료") ? 1 : 0)) / storeItems.length * 100) : 0}%` }} /></div>
       <button type="button" onClick={goListWithoutSave} disabled={isSaving}>목록</button>
-      <button type="button" className="primary" onClick={handleSave} disabled={isSaving} aria-label="저장"><CheckCircle2 size={19} />{isSaving ? "저장 중" : "저장"}</button>
+      <button type="button" className="primary" onClick={handleSave} disabled={isSaving || storeClosedLocked} aria-label="저장" title={storeClosedLocked ? "폐점/임시휴업 처리 품목은 개별 저장할 수 없습니다." : undefined}><CheckCircle2 size={19} />{isSaving ? "저장 중" : "저장"}</button>
       <button type="button" onClick={saveAndNext} disabled={isSaving}>다음</button>
     </div>
   </main>;
