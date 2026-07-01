@@ -59,6 +59,7 @@ export type SurveyItem = {
   discountEndDate: string;
   discountType: string;
   discountOral?: boolean;
+  discountPeriodMode?: "" | "상시할인" | "기간 할인" | "모름";
   priceJudgment: "" | "동일" | "고가" | "저가" | "확인필요";
   abnormalDisplay?: "" | "O" | "X";
   photoCase?: PhotoCase;

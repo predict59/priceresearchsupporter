@@ -38,6 +38,14 @@ const appendMemoText = (memo: string, text: string) => {
   if (parts.includes(text)) return memo;
   return parts.length ? `${parts.join(" / ")} / ${text}` : text;
 };
+const periodTypeFromDates = (start: string, end: string) => {
+  if (!start || !end) return "";
+  const startTime = new Date(`${start}T00:00:00`).getTime();
+  const endTime = new Date(`${end}T00:00:00`).getTime();
+  if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime < startTime) return "";
+  const days = Math.floor((endTime - startTime) / 86400000) + 1;
+  return days <= 31 ? "①" : "②";
+};
 type BarcodeDetectorConstructor = new (options?: { formats?: string[] }) => {
   detect: (source: ImageBitmapSource) => Promise<Array<{ rawValue: string }>>;
 };
@@ -429,6 +437,7 @@ function App() {
       discountEndDate: "",
       discountType: "",
       discountOral: false,
+      discountPeriodMode: "" as const,
       barcodeRegistered: "X" as const,
       abnormalStatus: "미판매" as const,
       posChecked: "조회불가" as const,
@@ -1234,6 +1243,41 @@ function ItemEditor({ item, storeItems, photos, onPhoto, onDeletePhoto, onSave, 
       memo: value === "조회함" ? appendMemo("POS 확인") : draft.memo,
     });
   };
+  const updateDiscountMode = (mode: NonNullable<SurveyItem["discountPeriodMode"]>) => {
+    if (mode === "상시할인") {
+      update({
+        discountPeriodMode: mode,
+        discountStartDate: "",
+        discountEndDate: "",
+        discountType: "②",
+        memo: appendMemo("상시할인"),
+      });
+      return;
+    }
+    if (mode === "모름") {
+      update({
+        discountPeriodMode: mode,
+        discountStartDate: "",
+        discountEndDate: "",
+        discountType: "",
+        memo: appendMemo("할인 정보 확인 불가"),
+      });
+      return;
+    }
+    update({
+      discountPeriodMode: mode,
+      discountType: periodTypeFromDates(draft.discountStartDate, draft.discountEndDate),
+    });
+  };
+  const updateDiscountDate = (field: "discountStartDate" | "discountEndDate", value: string) => {
+    const nextStart = field === "discountStartDate" ? value : draft.discountStartDate;
+    const nextEnd = field === "discountEndDate" ? value : draft.discountEndDate;
+    update({
+      [field]: value,
+      discountPeriodMode: "기간 할인",
+      discountType: periodTypeFromDates(nextStart, nextEnd),
+    });
+  };
   const priceBlocked = draft.normalDisplay === "X" && draft.barcodeRegistered === "X";
   const priceFeedback = draft.basePrice !== null && draft.normalPrice !== null
     ? (() => {
@@ -1284,7 +1328,28 @@ function ItemEditor({ item, storeItems, photos, onPhoto, onDeletePhoto, onSave, 
     <section className="panel"><h2>② 실물 확인</h2><Choice label="정상진열" value={draft.normalDisplay} values={["O", "X"]} onChange={(value) => update({ normalDisplay: value as SurveyItem["normalDisplay"], photoCase: value === "X" ? "POS_ONLY" : value === "O" ? "NORMAL" : "", specMatch: value === "X" ? "" : draft.specMatch, barcodeMatch: value === "X" ? "" : draft.barcodeMatch, barcodeRegistered: value === "O" ? "" : draft.barcodeRegistered, abnormalStatus: value === "O" ? "" : draft.abnormalStatus, posChecked: value === "O" ? "" : draft.posChecked, posPrice: null, abnormalDisplay: value === "X" ? "" : draft.abnormalDisplay })} /><Choice label="규격일치" disabled={draft.normalDisplay !== "O"} value={draft.normalDisplay === "O" ? draft.specMatch : ""} values={["O", "X"]} onChange={(value) => update({ specMatch: value as SurveyItem["specMatch"] })} /><Choice label="바코드일치" disabled={draft.normalDisplay !== "O"} value={draft.normalDisplay === "O" ? draft.barcodeMatch : ""} values={["O", "X"]} onChange={(value) => update({ barcodeMatch: value as SurveyItem["barcodeMatch"] })} /></section>
     <section className={`panel ${draft.normalDisplay === "X" ? "" : "disabled-block"}`}><h2>③ 상태 <small className="section-note">(정상진열 X 시 입력)</small></h2><Choice label="바코드 등록 여부" disabled={draft.normalDisplay !== "X"} value={draft.normalDisplay === "X" ? draft.barcodeRegistered : ""} values={["O", "X"]} onChange={(value) => update({ barcodeRegistered: value as SurveyItem["barcodeRegistered"] })} /><Choice label="판매여부" disabled={draft.normalDisplay !== "X"} value={draft.normalDisplay === "X" ? draft.abnormalStatus : ""} values={["미진열", "미판매"]} onChange={(value) => update({ abnormalStatus: value as SurveyItem["abnormalStatus"] })} /><Choice label="POS 조회 여부" disabled={draft.normalDisplay !== "X"} value={draft.normalDisplay === "X" ? draft.posChecked : ""} values={["조회함", "조회불가"]} onChange={updatePosChecked} /></section>
     <section className="panel"><h2>④ 사진자료</h2>{!draft.normalDisplay && <p className="notice">먼저 ② 실물 확인에서 정상진열 O/X를 선택하면 필요한 사진 입력칸이 표시됩니다.</p>}{draft.normalDisplay === "O" && <p className="small-help barcode-help">참고: 제품정보사진 촬영 시 브라우저가 지원하면 바코드를 자동 비교합니다.</p>}{photoMessage && draft.normalDisplay === "O" && <p className="ok upload-message">{photoMessage}</p>}{draft.normalDisplay === "O" && <><PhotoSlot id="photo-product-display" label="제품진열사진" description="가격정보와 진열상품이 동시노출 되도록 촬영" photo={itemPhotos.display} onFile={(file) => upload("PRODUCT_DISPLAY", file)} onDelete={onDeletePhoto} /><PhotoSlot id="photo-product-info" label="제품정보사진" description="상품후면 제품상세정보와 바코드 동시노출 되도록 촬영" photo={itemPhotos.info} onFile={(file) => upload("PRODUCT_INFO_BARCODE", file)} onDelete={onDeletePhoto} /></>}{draft.normalDisplay === "X" && <PhotoSlot id="photo-pos-receipt" label="POS/영수증사진" description="제품진열사진으로 가격정보 확인불가 시 POS기 또는 영수증 촬영" photo={itemPhotos.pos} onFile={(file) => upload("POS_RECEIPT", file)} onDelete={onDeletePhoto} />}{missing.length > 0 && <p className="warn">사진누락: {missing.join(", ")}</p>}</section>
-    <section className={`panel price-panel ${priceBlocked ? "disabled-block" : ""}`}><h2>⑤ 가격</h2><p className="price-base">기준가격: <strong>{draft.basePrice?.toLocaleString() ?? "-"}원</strong></p>{priceBlocked && <p className="small-help warn">바코드 미등록 미판매 상품은 가격 입력을 생략합니다.</p>}<Money label="정상가" disabled={priceBlocked} value={draft.normalPrice} onChange={(value) => update({ normalPrice: num(value) })} />{priceFeedback && <div className={`price-feedback ${priceFeedback.type}`}>{priceFeedback.messages.map((message) => <span key={message}><i aria-hidden="true">{priceFeedback.type === "warn" ? "!" : "✓"}</i>{message}</span>)}</div>}<Choice label="할인 여부" disabled={priceBlocked} value={draft.hasDiscount === null ? "" : draft.hasDiscount ? "할인 있음" : "할인 없음"} values={["할인 없음", "할인 있음"]} onChange={(value) => update({ hasDiscount: value === "할인 있음" })} /><div className={draft.hasDiscount === false || priceBlocked ? "disabled-block" : ""}><Money label="할인가" value={draft.discountPrice} disabled={draft.hasDiscount === false || priceBlocked} onChange={(value) => update({ discountPrice: num(value) })} /><label>할인 시작일<input type="date" disabled={draft.hasDiscount === false || priceBlocked} value={draft.discountStartDate} onChange={(event) => update({ discountStartDate: event.target.value })} /></label><label>할인 종료일<input type="date" disabled={draft.hasDiscount === false || priceBlocked} value={draft.discountEndDate} onChange={(event) => update({ discountEndDate: event.target.value })} /></label><DiscountPeriod disabled={draft.hasDiscount === false || priceBlocked} value={draft.discountType} oral={draft.discountOral ?? draft.discountType.includes("구두")} onChange={(discountType, discountOral) => update({ discountType, discountOral })} /></div></section>
+    <section className={`panel price-panel ${priceBlocked ? "disabled-block" : ""}`}>
+      <h2>⑤ 가격</h2>
+      <p className="price-base">기준가격: <strong>{draft.basePrice?.toLocaleString() ?? "-"}원</strong></p>
+      {priceBlocked && <p className="small-help warn">바코드 미등록 미판매 상품은 가격 입력을 생략합니다.</p>}
+      <Money label="정상가" disabled={priceBlocked} value={draft.normalPrice} onChange={(value) => update({ normalPrice: num(value) })} />
+      {priceFeedback && <div className={`price-feedback ${priceFeedback.type}`}>{priceFeedback.messages.map((message) => <span key={message}><i aria-hidden="true">{priceFeedback.type === "warn" ? "!" : "✓"}</i>{message}</span>)}</div>}
+      <Choice label="할인 여부" disabled={priceBlocked} value={draft.hasDiscount === null ? "" : draft.hasDiscount ? "할인 있음" : "할인 없음"} values={["할인 없음", "할인 있음"]} onChange={(value) => update({ hasDiscount: value === "할인 있음" })} />
+      <div className={draft.hasDiscount === false || priceBlocked ? "disabled-block" : ""}>
+        <Money label="할인가" value={draft.discountPrice} disabled={draft.hasDiscount === false || priceBlocked} onChange={(value) => update({ discountPrice: num(value) })} />
+        <DiscountControls
+          disabled={draft.hasDiscount === false || priceBlocked}
+          mode={draft.discountPeriodMode ?? ""}
+          oral={draft.discountOral ?? draft.discountType.includes("구두")}
+          start={draft.discountStartDate}
+          end={draft.discountEndDate}
+          periodType={draft.discountType}
+          onMode={updateDiscountMode}
+          onOral={(discountOral) => update({ discountOral, memo: discountOral ? appendMemo("구두확인") : draft.memo })}
+          onDate={updateDiscountDate}
+        />
+      </div>
+    </section>
     <section className="panel"><h2>⑥ 특이사항</h2><div className={`abnormal-block ${draft.normalDisplay === "X" ? "disabled-block" : ""}`}><Choice label="비정상진열" disabled={draft.normalDisplay === "X"} value={draft.normalDisplay === "X" ? "" : draft.abnormalDisplay ?? ""} values={["O", "X"]} onChange={(value) => update({ abnormalDisplay: value as SurveyItem["abnormalDisplay"] })} />{draft.abnormalDisplay === "O" && draft.normalDisplay !== "X" && <p className="small-help warn">비정상진열이면 어떤 위치에 어떻게 진열되어 있었는지 아래 비고에 적어주세요.</p>}</div><div className="memo-block"><h3>비고</h3><p className="small-help">자주 쓰는 문구를 누르면 비고에 추가됩니다.</p><div className="chips memo-chips">{["폐점", "품절", "재고 소진", "재입고 예정", "1+1 행사", "임시휴업", "판매처 미협조"].map((text) => <button key={text} onClick={() => update({ memo: appendMemo(text) })}>{text}</button>)}</div><textarea placeholder="예: 판매처 미협조 / 재입고 예정 / 사진 촬영 불가" value={draft.memo} onChange={(event) => update({ memo: event.target.value })} /></div></section>
     {saveMessage && <div className={`save-toast ${saveMessage.includes("실패") ? "danger-toast" : ""}`}>{saveMessage}</div>}
     <div className="item-action-fab">
@@ -1318,17 +1383,58 @@ function Info({ item }: { item: SurveyItem }) {
   return <dl className="info"><dt>업체명</dt><dd>{item.companyName}</dd><dt>업체연락처</dt><dd>{item.companyTel}</dd><dt>마트명</dt><dd>{item.martName}</dd><dt>바코드</dt><dd>{item.barcode}</dd><dt>물품명</dt><dd>{item.productName}</dd><dt>규격</dt><dd>{item.spec}</dd><dt>기준가격</dt><dd>{item.basePrice !== null ? `${item.basePrice.toLocaleString()}원` : "-"}</dd></dl>;
 }
 
-function DiscountPeriod({ value, oral, disabled, onChange }: { value: string; oral: boolean; disabled?: boolean; onChange: (value: string, oral: boolean) => void }) {
-  const normalized = value.replace("구두", "");
+function DiscountControls({
+  disabled,
+  mode,
+  oral,
+  start,
+  end,
+  periodType,
+  onMode,
+  onOral,
+  onDate,
+}: {
+  disabled?: boolean;
+  mode: NonNullable<SurveyItem["discountPeriodMode"]>;
+  oral: boolean;
+  start: string;
+  end: string;
+  periodType: string;
+  onMode: (mode: NonNullable<SurveyItem["discountPeriodMode"]>) => void;
+  onOral: (oral: boolean) => void;
+  onDate: (field: "discountStartDate" | "discountEndDate", value: string) => void;
+}) {
+  const normalized = periodType.replace("구두", "");
+  const datesDisabled = disabled || mode !== "기간 할인";
   return (
-    <div className="field-row">
-      <span>기간구분</span>
-      <div className="period-control">
-        <div className="segmented">
-          <button disabled={disabled} className={normalized === "①" ? "active" : ""} onClick={() => onChange(normalized === "①" ? "" : "①", oral)}>① 31일 이내</button>
-          <button disabled={disabled} className={normalized === "②" ? "active" : ""} onClick={() => onChange(normalized === "②" ? "" : "②", oral)}>② 32일 이상</button>
+    <div className="discount-controls">
+      <div className="field-row">
+        <span>할인기간</span>
+        <div className="period-control">
+          <div className="segmented">
+            {(["상시할인", "기간 할인", "모름"] as NonNullable<SurveyItem["discountPeriodMode"]>[]).map((candidate) => (
+              <button disabled={disabled} className={mode === candidate ? "active" : ""} key={candidate} onClick={() => onMode(mode === candidate ? "" : candidate)}>{candidate}</button>
+            ))}
+          </div>
+          <label className="inline-check"><input type="checkbox" disabled={disabled} checked={oral} onChange={(event) => onOral(event.target.checked)} /> 구두 확인</label>
         </div>
-        <label className="inline-check"><input type="checkbox" disabled={disabled} checked={oral} onChange={(event) => onChange(normalized, event.target.checked)} /> 구두 확인</label>
+      </div>
+      <div className="field-row date-range-row">
+        <span>할인 기간</span>
+        <div className="date-range">
+          <input aria-label="할인 시작일" type="date" disabled={datesDisabled} value={start} onChange={(event) => onDate("discountStartDate", event.target.value)} />
+          <b>~</b>
+          <input aria-label="할인 종료일" type="date" disabled={datesDisabled} value={end} onChange={(event) => onDate("discountEndDate", event.target.value)} />
+        </div>
+      </div>
+      <div className="field-row">
+        <span>기간구분</span>
+        <div className="readonly-period">
+          <span className={normalized === "①" ? "active" : ""}>① 31일 이내</span>
+          <span className={normalized === "②" ? "active" : ""}>② 32일 이상</span>
+          {!normalized && <em>날짜 입력 시 자동 확인</em>}
+          {oral && normalized && <em>{normalized}구두확인</em>}
+        </div>
       </div>
     </div>
   );

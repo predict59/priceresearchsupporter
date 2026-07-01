@@ -75,7 +75,7 @@ export async function exportRegionExcel(region: string, items: SurveyItem[]) {
     item.discountPrice ?? "",
     item.discountStartDate,
     item.discountEndDate,
-    `${item.discountType.replace("구두", "")}${item.discountOral || item.discountType.includes("구두") ? "구두" : ""}`,
+    `${item.discountType.replace("구두", "") === "①" ? "1" : item.discountType.replace("구두", "") === "②" ? "2" : item.discountType.replace("구두", "")}${item.discountOral || item.discountType.includes("구두") ? "구두확인" : ""}`,
     item.barcodeRegistered,
     item.abnormalStatus === "미판매" ? "O" : item.abnormalStatus ? "-" : "",
     item.abnormalStatus === "미진열" ? "O" : item.abnormalStatus ? "-" : "",

@@ -874,6 +874,47 @@ textarea { min-height: 110px; resize: vertical; }
   min-height: 36px;
 }
 .inline-check input { width: auto; min-height: auto; }
+.discount-controls {
+  display: grid;
+  gap: 2px;
+}
+.date-range {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+.date-range b {
+  color: #64748b;
+  font-weight: 900;
+}
+.readonly-period {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-height: 42px;
+}
+.readonly-period span {
+  border: 1px solid #c9d2d8;
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 900;
+}
+.readonly-period span.active {
+  background: #155e75;
+  border-color: #155e75;
+  color: #fff;
+}
+.readonly-period em {
+  font-style: normal;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
 .price-base {
   margin: -2px 0 12px;
   color: #64748b;
@@ -1312,6 +1353,8 @@ textarea { min-height: 110px; resize: vertical; }
   .item-contact a { justify-content: center; }
   .photo-actions { grid-template-columns: 1fr; }
   .photo-picker > div { grid-template-columns: 1fr 1fr; }
+  .date-range { grid-template-columns: 1fr; }
+  .date-range b { text-align: center; }
   .price-feedback { margin-left: 0; }
   .save-fab { right: 12px; bottom: 14px; }
   .save-toast { right: 12px; bottom: 78px; }

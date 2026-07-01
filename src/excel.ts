@@ -182,6 +182,7 @@ export async function parseSurveyWorkbook(file: File): Promise<{ regions: Region
       discountEndDate: "",
       discountType: "",
       discountOral: false,
+      discountPeriodMode: "",
       priceJudgment: "",
       abnormalDisplay: "",
       barcodeRegistered: "",
