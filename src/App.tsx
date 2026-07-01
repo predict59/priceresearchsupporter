@@ -1107,7 +1107,7 @@ function StoreCard({
       </div>
       <div className="store-progress">
         <div className="store-progress-head">
-          <strong>마트: 완료 {stats.completed.toLocaleString()} / 전체 {stats.total.toLocaleString()}</strong>
+          <strong>물품: 완료 {stats.completed.toLocaleString()} / 전체 {stats.total.toLocaleString()}</strong>
           <span>미조사 {(stats.total - stats.completed).toLocaleString()}</span>
         </div>
         <div className="progress-line"><span style={{ width: `${percent}%` }} /></div>
@@ -1170,7 +1170,7 @@ function Contacts({ items }: { items: SurveyItem[] }) {
   const contacts = Array.from(new Map(items.map((item) => [`${item.companyName}|${item.companyManager}|${item.companyTel}|${item.martTel}`, item])).values());
   return (
     <section className="panel">
-      <h2>마트 연락처</h2>
+      <h2>담당자 연락처</h2>
       {contacts.length === 0 && <p className="warn">확인 필요: 연락처 정보가 없습니다.</p>}
       {contacts.map((item) => {
         const count = items.filter((candidate) => candidate.companyName === item.companyName && candidate.companyManager === item.companyManager && candidate.companyTel === item.companyTel && candidate.martTel === item.martTel).length;
@@ -1178,9 +1178,8 @@ function Contacts({ items }: { items: SurveyItem[] }) {
           <div className="contact" key={`${item.companyName}-${item.companyManager}-${item.companyTel}-${item.martTel}`}>
             <dl className="contact-info">
               <dt>제조사</dt><dd>{item.companyName || "확인 필요"}</dd>
-              <dt>담당자</dt><dd>{item.companyManager || "확인 필요"}</dd>
+              <dt>담당자명</dt><dd>{item.companyManager || "확인 필요"}</dd>
               <dt>담당자 연락처</dt><dd>{item.companyTel ? <a href={`tel:${item.companyTel.replace(/[^\d+]/g, "")}`}><Phone size={15} />{item.companyTel}</a> : <span className="warn">확인 필요</span>}</dd>
-              <dt>마트 연락처</dt><dd>{item.martTel ? <a href={`tel:${item.martTel.replace(/[^\d+]/g, "")}`}><Phone size={15} />{item.martTel}</a> : <span className="warn">확인 필요</span>}</dd>
               <dt>품목</dt><dd>{count.toLocaleString()}개</dd>
             </dl>
           </div>
@@ -1191,18 +1190,16 @@ function Contacts({ items }: { items: SurveyItem[] }) {
 }
 
 function ItemContact({ item }: { item: SurveyItem }) {
-  const hasAnyContact = Boolean(item.companyName || item.companyManager || item.companyTel || item.martTel);
+  const hasAnyContact = Boolean(item.companyName || item.companyManager || item.companyTel);
   return (
-    <section className={`item-contact ${hasAnyContact && (item.companyTel || item.martTel) ? "" : "needs-check"}`}>
+    <section className={`item-contact ${hasAnyContact && item.companyTel ? "" : "needs-check"}`}>
       <div>
         <h2>담당자 정보</h2>
         <strong>{item.companyName || "제조사 확인 필요"}</strong>
-        <span>담당자: {item.companyManager || "확인 필요"}</span>
+        <span>담당자명: {item.companyManager || "확인 필요"}</span>
+        <span>연락처: {item.companyTel || "확인 필요"}</span>
       </div>
-      <div className="item-contact-links">
-        {item.companyTel ? <a href={`tel:${item.companyTel.replace(/[^\d+]/g, "")}`}><Phone size={15} />담당자 {item.companyTel}</a> : <span className="warn">담당자 연락처 확인 필요</span>}
-        {item.martTel ? <a href={`tel:${item.martTel.replace(/[^\d+]/g, "")}`}><Phone size={15} />마트 {item.martTel}</a> : <span className="warn">마트 연락처 확인 필요</span>}
-      </div>
+      {item.companyTel && <a href={`tel:${item.companyTel.replace(/[^\d+]/g, "")}`}><Phone size={15} />전화</a>}
     </section>
   );
 }
@@ -1473,7 +1470,7 @@ function PhotoSlot({ id, label, description, photo, onFile, onDelete }: { id: st
 }
 
 function Info({ item }: { item: SurveyItem }) {
-  return <dl className="info"><dt>제조사</dt><dd>{item.companyName}</dd><dt>담당자</dt><dd>{item.companyManager || "-"}</dd><dt>담당자 연락처</dt><dd>{item.companyTel || "-"}</dd><dt>마트명</dt><dd>{item.martName}</dd><dt>마트 연락처</dt><dd>{item.martTel || "-"}</dd><dt>바코드</dt><dd>{item.barcode}</dd><dt>물품명</dt><dd>{item.productName}</dd><dt>규격</dt><dd>{item.spec}</dd><dt>기준가격</dt><dd>{item.basePrice !== null ? `${item.basePrice.toLocaleString()}원` : "-"}</dd></dl>;
+  return <dl className="info"><dt>물품코드</dt><dd>{item.itemNo}</dd><dt>제조사</dt><dd>{item.companyName}</dd><dt>물품명</dt><dd>{item.productName}</dd><dt>규격</dt><dd>{item.spec}</dd><dt>기준가격</dt><dd>{item.basePrice !== null ? `${item.basePrice.toLocaleString()}원` : "-"}</dd><dt>바코드</dt><dd>{item.barcode}</dd></dl>;
 }
 
 function DiscountControls({
