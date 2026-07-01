@@ -330,6 +330,18 @@ function App() {
   }, [view, currentRegion, selectedStoreId, selectedItemId]);
 
   useEffect(() => {
+    const lockHorizontalScroll = () => {
+      if (window.scrollX !== 0) window.scrollTo(0, window.scrollY);
+    };
+    window.addEventListener("scroll", lockHorizontalScroll, { passive: true });
+    window.visualViewport?.addEventListener("scroll", lockHorizontalScroll);
+    return () => {
+      window.removeEventListener("scroll", lockHorizontalScroll);
+      window.visualViewport?.removeEventListener("scroll", lockHorizontalScroll);
+    };
+  }, []);
+
+  useEffect(() => {
     if (view !== "workspace") {
       setOrderEditing(false);
       setDragStoreId("");

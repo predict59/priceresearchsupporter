@@ -50,9 +50,9 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   position: fixed;
   top: 0;
   left: 0;
-  right: 0;
-  width: 100%;
-  max-width: 100dvw;
+  right: auto;
+  width: var(--app-visual-width);
+  max-width: var(--app-visual-width);
   box-sizing: border-box;
   z-index: 30;
   background: #fff;
@@ -1683,7 +1683,12 @@ textarea { min-height: 110px; resize: vertical; }
 
 @media (max-width: 720px) {
   :root { --topbar-height: 51px; }
-  .topbar { width: auto; max-width: none; }
+  .topbar {
+    left: 0;
+    right: auto;
+    width: var(--app-visual-width);
+    max-width: var(--app-visual-width);
+  }
   .top-main { grid-template-columns: 38px minmax(0, 1fr) 38px; gap: 6px; }
   .brand { font-size: 16px; }
   .current { display: none; }
