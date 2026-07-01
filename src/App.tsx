@@ -1,4 +1,4 @@
-import { Camera, CheckCircle2, ChevronDown, ChevronUp, Download, Info as InfoIcon, MapPin, Menu, MoreVertical, Phone, SlidersHorizontal, Search, Upload, X } from "lucide-react";
+import { Camera, CheckCircle2, ChevronDown, ChevronUp, Download, MapPin, Menu, MoreVertical, Phone, SlidersHorizontal, Search, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import { clearAllData, deletePhoto, getItems, getPhotosByRegion, getPhotosByStore, getRegions, getSettings, getStores, importRegionData, now, putItem, putPhoto, putStore, saveParsedData, saveSettings, today, uid } from "./db";
@@ -596,12 +596,11 @@ function App() {
     : view === "validation" ? "검증"
     : view === "backup" ? "백업/복원"
     : "자료 업로드";
-  const topContext =
-    view === "store" || view === "items" || view === "item"
-      ? `현재 마트: ${selectedStore?.storeName ?? selectedItem?.storeName ?? "-"}`
-      : view === "workspace" || view === "validation"
-        ? currentRegion ? `현재 지역: ${currentRegion}` : ""
-        : "";
+  const menuRegionStats = currentRegion ? regionSummary(currentRegion) : emptyStats;
+  const menuItemStats = view === "items" && selectedStore
+    ? summarize(storeItems, photos.filter((photo) => photo.storeId === selectedStore.id))
+    : currentRegion ? summarize(regionItems, photos) : emptyStats;
+  const menuContext = selectedStore?.storeName ?? selectedItem?.storeName;
 
   if (isBooting) {
     return (
@@ -621,13 +620,19 @@ function App() {
         <div className="top-main">
           <button className="top-back icon-button" onClick={goBack} disabled={!canGoBack} aria-label="뒤로가기">←</button>
           <button className="brand" onClick={() => { setStoreQuery(""); setItemQuery(""); setView(regions.length ? "regions" : "upload"); }}>{screenTitle}</button>
-          <span className="current">{topContext}</span>
+          <span className="current" aria-hidden="true" />
           <button className="top-toggle icon-button" onClick={() => setMenuOpen((value) => !value)} aria-expanded={menuOpen} aria-label="메뉴 열기">
             <Menu size={20} />
           </button>
         </div>
         <div className="top-actions">
-          <button onClick={() => { setStoreQuery(""); setItemQuery(""); setView("regions"); setMenuOpen(false); }}>지역 선택</button>
+          <div className="menu-status">
+            <span>지역 <strong>{currentRegion || "-"}</strong></span>
+            {menuContext && <span>마트 <strong>{menuContext}</strong></span>}
+            <div className="menu-progress"><i style={{ width: `${menuItemStats.total ? Math.round((menuItemStats.completed / menuItemStats.total) * 100) : 0}%` }} /></div>
+            <small>품목 {menuItemStats.completed.toLocaleString()} / {menuItemStats.total.toLocaleString()} · 마트 {menuRegionStats.completed.toLocaleString()} / {menuRegionStats.total.toLocaleString()}</small>
+          </div>
+          <button onClick={() => { setStoreQuery(""); setItemQuery(""); setView("regions"); setMenuOpen(false); }}>HOME</button>
           <button disabled={!currentRegion} onClick={() => { setView("validation"); setMenuOpen(false); }}>검증</button>
           <button onClick={() => { setView("backup"); setMenuOpen(false); }}>백업/복원</button>
           <button onClick={openStorageInfo}>자체저장공간</button>
@@ -799,7 +804,6 @@ function App() {
         <main className="page">
           <div className="sticky-search item-search">
             <SearchBox value={itemQuery} onChange={setItemQuery} placeholder="품목명 / 바코드 / 품목코드 / 담당자" />
-            <button className="tool-toggle icon-button" onClick={() => setSummaryOpen(true)} aria-label="현황 보기"><InfoIcon size={18} /></button>
             <button className="tool-toggle" onClick={() => setItemToolsOpen((value) => !value)} aria-expanded={itemToolsOpen}>
               <SlidersHorizontal size={18} /> 필터 {itemToolsOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </button>

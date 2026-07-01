@@ -70,6 +70,43 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   z-index: 40;
 }
 .menu-open .top-actions { display: grid; }
+.menu-status {
+  display: grid;
+  gap: 5px;
+  padding: 10px 10px 12px;
+  border-bottom: 1px solid #e5ebef;
+  color: #52616b;
+  font-size: 12px;
+  font-weight: 800;
+}
+.menu-status span {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+.menu-status strong {
+  color: #17202a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.menu-status small {
+  color: #64748b;
+  font-weight: 800;
+}
+.menu-progress {
+  height: 5px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #e2e8f0;
+}
+.menu-progress i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #0f766e;
+}
 .top-actions button { width: 100%; justify-content: flex-start; border: 0; }
 .top-actions button:hover { background: #eef2f4; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -1186,8 +1223,8 @@ textarea { min-height: 110px; resize: vertical; }
 .item-action-fab {
   position: fixed;
   left: 50%;
-  width: min(760px, calc(100dvw - 24px));
-  max-width: calc(100dvw - 24px);
+  width: min(680px, calc(100% - 56px));
+  max-width: calc(100% - 56px);
   transform: translateX(-50%);
   bottom: 14px;
   z-index: 25;
@@ -1218,6 +1255,7 @@ textarea { min-height: 110px; resize: vertical; }
   min-height: 46px;
   border-radius: 999px;
   padding: 0 10px;
+  font-size: clamp(14px, 3.4vw, 18px);
   font-weight: 900;
   min-width: 0;
 }
@@ -1496,10 +1534,17 @@ textarea { min-height: 110px; resize: vertical; }
 @media (max-width: 720px) {
   .top-main { grid-template-columns: 38px minmax(0, 1fr) auto 38px; gap: 6px; }
   .brand { font-size: 16px; }
-  .current { max-width: 96px; font-size: 11px; }
+  .current { display: none; }
   .top-back, .top-toggle { width: 38px; min-height: 38px; }
   .sticky-search { grid-template-columns: 1fr auto auto; }
   .sticky-search .search { grid-column: 1 / -1; }
+  .item-search {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .item-search .search {
+    grid-column: auto;
+    margin-right: 0;
+  }
   .workspace-search { grid-template-columns: minmax(0, 1fr) auto; }
   .workspace-search .search { grid-column: auto; }
   .tool-toggle:not(.icon-button) { grid-column: 2 / 4; }
@@ -1537,8 +1582,8 @@ textarea { min-height: 110px; resize: vertical; }
     padding-right: 10px;
   }
   .item-action-fab {
-    left: 10px;
-    right: 10px;
+    left: 28px;
+    right: 28px;
     width: auto;
     max-width: none;
     transform: none;

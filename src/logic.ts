@@ -24,7 +24,7 @@ export function productPhotoMissingLabels(item: SurveyItem, photos: SurveyPhoto[
     if (!hasPos) missing.push("POS/영수증사진");
   } else {
     if (!hasDisplay) missing.push("제품진열사진");
-    if (!hasInfo) missing.push("제품정보/후면/바코드사진");
+    if (!hasInfo) missing.push("제품정보사진");
   }
   return missing;
 }
