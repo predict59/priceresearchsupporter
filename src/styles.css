@@ -185,6 +185,17 @@ h2 { font-size: 18px; margin: 0 0 10px; letter-spacing: 0; }
   justify-self: end;
   white-space: nowrap;
 }
+.item-badge-stack {
+  display: inline-flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.badge-photo-missing {
+  background: #fff1f2;
+  color: #b91c1c;
+}
 .item-card.focused {
   border-color: #0f766e;
   box-shadow: 0 0 0 3px rgba(15, 118, 110, .12);
