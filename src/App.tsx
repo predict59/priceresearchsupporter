@@ -16,6 +16,7 @@ type ConfirmState = {
   confirmText?: string;
   cancelText?: string;
   danger?: boolean;
+  plain?: boolean;
 };
 
 const mapLinks = (address: string) => [
@@ -217,6 +218,7 @@ function App() {
   const [photosReady, setPhotosReady] = useState(false);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [storeStatusDraft, setStoreStatusDraft] = useState<StoreOperatingStatus | "">("");
+  const [storeStatusMessage, setStoreStatusMessage] = useState("");
   const confirmResolver = useRef<((value: boolean) => void) | null>(null);
 
   const currentRegion = settings.currentRegion;
@@ -270,6 +272,7 @@ function App() {
   const selectedItem = items.find((item) => item.id === selectedItemId);
   useEffect(() => {
     setStoreStatusDraft(selectedStore?.frontPhotoId ? selectedStore.operatingStatus ?? "" : "");
+    setStoreStatusMessage("");
   }, [selectedStore?.id, selectedStore?.frontPhotoId, selectedStore?.operatingStatus]);
   const stats = useMemo(() => summarize(regionItems, photos), [regionItems, photos]);
 
@@ -305,10 +308,9 @@ function App() {
 
   useEffect(() => {
     const updateVisualWidth = () => {
-      const topbarWidth = topbarRef.current?.getBoundingClientRect().width || Number.POSITIVE_INFINITY;
       const visualWidth = window.visualViewport?.width || Number.POSITIVE_INFINITY;
-      const bodyWidth = document.body.clientWidth || Number.POSITIVE_INFINITY;
-      const width = Math.floor(Math.min(topbarWidth, visualWidth, bodyWidth));
+      const layoutWidth = document.documentElement.clientWidth || window.innerWidth || Number.POSITIVE_INFINITY;
+      const width = Math.floor(Math.min(visualWidth, layoutWidth));
       if (Number.isFinite(width) && width > 0) {
         document.documentElement.style.setProperty("--app-visual-width", `${width}px`);
       }
@@ -531,6 +533,7 @@ function App() {
     if (!status) {
       await putStore({ ...selectedStore, operatingStatus: undefined, updatedAt: now() });
       await refresh(selectedStore.region);
+      setStoreStatusMessage("상태가 미확인으로 변경되었습니다.");
       return;
     }
     if (status === selectedStore.operatingStatus) return;
@@ -544,6 +547,7 @@ function App() {
     }
     await putStore({ ...selectedStore, operatingStatus: status, updatedAt: now() });
     await refresh(selectedStore.region);
+    setStoreStatusMessage(`상태가 ${status}(으)로 변경되었습니다.`);
   }
 
   async function applyStoreOperatingStatus(status: Exclude<StoreOperatingStatus, "영업 중">) {
@@ -591,6 +595,7 @@ function App() {
     await putStore({ ...store, operatingStatus: status, status: "완료", updatedAt: now() });
     await Promise.all(changedItems.map(putItem));
     await refresh(store.region);
+    setStoreStatusMessage(`상태가 ${status}(으)로 변경되었습니다.`);
   }
 
   async function resetStoreItemsForOpen(store: SurveyStore) {
@@ -633,6 +638,7 @@ function App() {
     await putStore({ ...store, operatingStatus: "영업 중", status: "진행중", completedAt: undefined, updatedAt: now() });
     await Promise.all(resetItems.map(putItem));
     await refresh(store.region);
+    setStoreStatusMessage("영업 중으로 전환하고 품목 정보를 초기화했습니다.");
   }
 
   async function doExportExcel(region = currentRegion) {
@@ -689,11 +695,12 @@ function App() {
     const regionItemsForSummary = items.filter((item) => item.region === region);
     const completed = regionStoresForSummary.filter((store) => {
       const own = regionItemsForSummary.filter((item) => item.storeId === store.id);
-      return own.length > 0 && own.every((item) => item.status === "완료");
+      return Boolean(store.frontPhotoId) && own.length > 0 && own.every((item) => item.status === "완료");
     }).length;
     const inProgress = regionStoresForSummary.filter((store) => {
       const own = regionItemsForSummary.filter((item) => item.storeId === store.id);
-      return own.some((item) => item.status === "완료" || item.status === "조사중") && !(own.length > 0 && own.every((item) => item.status === "완료"));
+      const done = Boolean(store.frontPhotoId) && own.length > 0 && own.every((item) => item.status === "완료");
+      return (Boolean(store.frontPhotoId) || own.some((item) => item.status === "완료" || item.status === "조사중")) && !done;
     }).length;
     return {
       total: regionStoresForSummary.length,
@@ -911,10 +918,6 @@ function App() {
         <main className="page narrow">
           <section className="panel">
             <h1>{selectedStore.storeName}</h1>
-            <div className="store-operating">
-              <span>현재상태</span>
-              <strong className={`operating-badge ${selectedStore.frontPhotoId && selectedStore.operatingStatus ? operatingClass(selectedStore.operatingStatus) : "unknown"}`}>{storeDisplayStatus(selectedStore)}</strong>
-            </div>
             <div className="store-address"><span>주소</span><strong>{selectedStore.storeAddress || "-"}</strong></div>
             <div className="store-address store-photo-heading"><span>마트 전경사진</span></div>
             {(() => {
@@ -929,6 +932,13 @@ function App() {
             </div>
               );
             })()}
+          </section>
+          <section className="panel store-status-panel">
+            <h2>상태</h2>
+            <div className="store-operating">
+              <span>현재 마트 상태</span>
+              <strong className={`operating-badge ${selectedStore.frontPhotoId && selectedStore.operatingStatus ? operatingClass(selectedStore.operatingStatus) : "unknown"}`}>{storeDisplayStatus(selectedStore)}</strong>
+            </div>
             <div className="store-state-actions">
               <select disabled={!selectedStore.frontPhotoId} value={selectedStore.frontPhotoId ? storeStatusDraft : ""} onChange={(event) => setStoreStatusDraft(event.target.value as StoreOperatingStatus | "")}>
                 <option value="">미확인</option>
@@ -936,14 +946,17 @@ function App() {
                 <option value="폐업">폐업</option>
                 <option value="임시휴업">임시휴업</option>
               </select>
-              <button type="button" className="primary" disabled={!selectedStore.frontPhotoId} onClick={() => setStoreOperatingStatus(storeStatusDraft)}>전환</button>
+              <button type="button" className="primary" disabled={!selectedStore.frontPhotoId} onClick={() => setStoreOperatingStatus(storeStatusDraft)}>저장</button>
             </div>
+            {!selectedStore.frontPhotoId && <p className="small-help warn">마트 전경사진을 먼저 등록해야 상태를 전환할 수 있습니다.</p>}
+            {selectedStore.frontPhotoId && !selectedStore.operatingStatus && <p className="small-help warn">조사 입력 전 마트 상태를 영업 중, 폐업, 임시휴업 중 하나로 설정해 주세요.</p>}
+            {storeStatusMessage && <p className="ok store-status-message">{storeStatusMessage}</p>}
           </section>
           <Contacts items={storeItems} />
           <section className="panel">
             <p>조사 품목: {storeItems.length.toLocaleString()}건</p>
             <label className="store-date-row"><span>방문 조사일</span><input type="date" value={selectedStore.surveyDate} onChange={async (event) => { await putStore({ ...selectedStore, surveyDate: event.target.value, updatedAt: now() }); await refresh(selectedStore.region); }} /></label>
-            <button className="primary sticky-lite" onClick={() => selectedStore.frontPhotoId ? (setItemQuery(""), setView("items")) : alert("마트 전경사진을 먼저 촬영/선택해 주세요.")}>조사 입력</button>
+            <button className="primary sticky-lite" onClick={() => selectedStore.frontPhotoId && selectedStore.operatingStatus ? (setItemQuery(""), setView("items")) : alert(selectedStore.frontPhotoId ? "마트 상태를 먼저 설정해 주세요." : "마트 전경사진을 먼저 촬영/선택해 주세요.")}>조사 입력</button>
           </section>
         </main>
       )}
@@ -968,8 +981,8 @@ function App() {
               const eligibility = getPriceEligibility(item);
               const itemPhotoMissing = item.status === "완료" && requiredPhotoLabels(item, photos.filter((photo) => photo.storeId === item.storeId)).length > 0;
               return (
-                <article className={`card compact item-card ${selectedItemId === item.id ? "focused" : ""}`} key={item.id}>
-                  <div className="item-card-head"><h2 className="item-title"><span className="item-code">{item.itemNo}</span><span>{item.productName}</span></h2><div className="item-badge-stack"><Badge text={item.status} />{itemPhotoMissing && <span className="badge badge-photo-missing">사진누락</span>}</div></div>
+                <article className={`card compact item-card ${selectedItemId === item.id ? "focused" : ""} ${item.status === "완료" ? "completed" : ""}`} key={item.id}>
+                  <div className="item-card-head"><h2 className="item-title"><span className="item-code">{item.itemNo}</span><span>{item.productName}</span></h2><div className="item-badge-stack">{item.status !== "완료" && <Badge text={item.status} />}{itemPhotoMissing && <span className="badge badge-photo-missing">사진누락</span>}</div></div>
                   <div className={`item-card-body ${previewPhoto ? "" : "no-thumb"}`}>
                     <PhotoPreview photo={previewPhoto} className="item-thumb" />
                     <dl className="item-mini-info">
@@ -1053,7 +1066,7 @@ function App() {
           storeCount={regionStores.length}
           completedStoreCount={regionStores.filter((store) => {
             const ownStats = regionStatsByStore.get(store.id) ?? emptyStats;
-            return ownStats.total > 0 && ownStats.completed === ownStats.total;
+            return Boolean(store.frontPhotoId) && ownStats.total > 0 && ownStats.completed === ownStats.total;
           }).length}
           mode="workspace"
           onClose={() => setSummaryOpen(false)}
@@ -1144,8 +1157,8 @@ function ConfirmDialog({ state, onClose }: { state: ConfirmState; onClose: (valu
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true">
       <section className="modal confirm-dialog">
-        <div className="confirm-icon" aria-hidden="true">{state.danger ? "!" : "✓"}</div>
-        <h2>{state.title}</h2>
+        {!state.plain && <div className="confirm-icon" aria-hidden="true">{state.danger ? "!" : "✓"}</div>}
+        {state.title && <h2>{state.title}</h2>}
         <div className="confirm-message">
           {state.message.split("\n").map((line, index) => <p key={`${line}-${index}`}>{line || "\u00a0"}</p>)}
         </div>
@@ -1266,7 +1279,7 @@ function StoreCard({
   const completed = items.filter((item) => item.status === "완료");
   const latestSurveyDate = completed.map((item) => item.surveyDate).filter(Boolean).sort().at(-1) ?? "-";
   const percent = stats.total ? Math.round((stats.completed / stats.total) * 100) : 0;
-  const completedStore = stats.total > 0 && stats.completed === stats.total;
+  const completedStore = Boolean(store.frontPhotoId) && stats.total > 0 && stats.completed === stats.total;
   const displayOperatingStatus = storeDisplayStatus(store);
   if (orderEditing) {
     return (
@@ -1303,7 +1316,6 @@ function StoreCard({
         <div className="store-metric-row">
           <span>물품</span>
           <strong>{stats.completed.toLocaleString()}<small>/{stats.total.toLocaleString()}</small></strong>
-          <em>미조사 {(stats.total - stats.completed).toLocaleString()}</em>
         </div>
         <div className="progress-line"><span style={{ width: `${percent}%` }} /></div>
       </div>
@@ -1369,19 +1381,17 @@ function SummaryModal({ region, stats, storeCount, completedStoreCount, mode, on
 }
 
 function Contacts({ items }: { items: SurveyItem[] }) {
-  const contacts = Array.from(new Map(items.map((item) => [`${item.companyName}|${item.companyManager}|${item.companyTel}|${item.martTel}`, item])).values());
+  const contacts = Array.from(new Map(items.map((item) => [`${item.companyManager}|${item.companyTel}|${item.martTel}`, item])).values());
   return (
     <section className="panel">
+      <h2>담당자 정보</h2>
       {contacts.length === 0 && <p className="warn">확인 필요: 연락처 정보가 없습니다.</p>}
       {contacts.map((item) => {
-        const count = items.filter((candidate) => candidate.companyName === item.companyName && candidate.companyManager === item.companyManager && candidate.companyTel === item.companyTel && candidate.martTel === item.martTel).length;
         return (
-          <div className="contact" key={`${item.companyName}-${item.companyManager}-${item.companyTel}-${item.martTel}`}>
+          <div className="contact" key={`${item.companyManager}-${item.companyTel}-${item.martTel}`}>
             <dl className="contact-info">
-              <dt>제조사</dt><dd>{item.companyName || "확인 필요"}</dd>
               <dt>담당자명</dt><dd>{item.companyManager || "확인 필요"}</dd>
               <dt>담당자 연락처</dt><dd>{item.companyTel ? <a href={`tel:${item.companyTel.replace(/[^\d+]/g, "")}`}><Phone size={15} />{item.companyTel}</a> : <span className="warn">확인 필요</span>}</dd>
-              <dt>품목</dt><dd>{count.toLocaleString()}개</dd>
             </dl>
           </div>
         );
@@ -1391,12 +1401,11 @@ function Contacts({ items }: { items: SurveyItem[] }) {
 }
 
 function ItemContact({ item }: { item: SurveyItem }) {
-  const hasAnyContact = Boolean(item.companyName || item.companyManager || item.companyTel);
+  const hasAnyContact = Boolean(item.companyManager || item.companyTel);
   return (
     <section className={`item-contact ${hasAnyContact && item.companyTel ? "" : "needs-check"}`}>
       <div>
         <h2>담당자 정보</h2>
-        <strong>{item.companyName || "제조사 확인 필요"}</strong>
         <span>담당자명: {item.companyManager || "확인 필요"}</span>
         <span>연락처: {item.companyTel ? <a href={`tel:${item.companyTel.replace(/[^\d+]/g, "")}`}>{item.companyTel}</a> : "확인 필요"}</span>
       </div>
@@ -1520,15 +1529,16 @@ function ItemEditor({ item, storeItems, photos, onSave, onSaved, onList, onStore
   };
   const updateNormalDisplay = async (value: string) => {
     const nextValue = value as SurveyItem["normalDisplay"];
-    const removeTypes = nextValue === "X" ? ["PRODUCT_DISPLAY", "PRODUCT_INFO_BARCODE"] as PhotoType[] : nextValue === "O" ? ["POS_RECEIPT"] as PhotoType[] : [];
+    const removeTypes = nextValue === "X" ? ["PRODUCT_DISPLAY", "PRODUCT_INFO_BARCODE"] as PhotoType[] : [];
     const removing = localPhotos.filter((photo) => photo.itemId === draft.id && removeTypes.includes(photo.type));
     if (removing.length > 0) {
       const ok = await askConfirm({
-        title: "사진을 정리할까요?",
+        title: "",
         message: `진열여부를 변경하면 현재 선택한 상태에 맞지 않는 사진 ${removing.length}장이 삭제됩니다. 계속할까요?`,
         confirmText: "삭제 후 변경",
         cancelText: "취소",
         danger: true,
+        plain: true,
       });
       if (!ok) return;
       removeLocalPhotoTypes(removeTypes);
@@ -1673,7 +1683,15 @@ function ItemEditor({ item, storeItems, photos, onSave, onSaved, onList, onStore
     <details className="panel" open><summary>① 국군복지단 제시정보</summary><Info item={draft} /></details>
     <section className="panel"><h2>② 실물 확인</h2><Choice label="진열여부" note="*조사표에는 정상진열로 표기" value={draft.normalDisplay} values={["O", "X"]} onChange={updateNormalDisplay} /><Choice label="규격일치" disabled={draft.normalDisplay !== "O"} value={draft.normalDisplay === "O" ? draft.specMatch : ""} values={["O", "X"]} onChange={(value) => update({ specMatch: value as SurveyItem["specMatch"] })} /><Choice label="바코드일치" disabled={draft.normalDisplay !== "O"} value={draft.normalDisplay === "O" ? draft.barcodeMatch : ""} values={["O", "X"]} onChange={(value) => update({ barcodeMatch: value as SurveyItem["barcodeMatch"] })} /></section>
     <section className={`panel ${draft.normalDisplay === "X" ? "" : "disabled-block"}`}><h2>③ 상태 <small className="section-note">(정상진열 X 시 입력)</small></h2><Choice label="바코드 등록 여부" disabled={draft.normalDisplay !== "X"} value={draft.normalDisplay === "X" ? draft.barcodeRegistered : ""} values={["O", "X"]} onChange={(value) => update({ barcodeRegistered: value as SurveyItem["barcodeRegistered"] })} /><Choice label="판매여부" disabled={draft.normalDisplay !== "X"} value={draft.normalDisplay === "X" ? draft.abnormalStatus : ""} values={["미진열", "미판매"]} onChange={(value) => update({ abnormalStatus: value as SurveyItem["abnormalStatus"] })} /><Choice label="POS 조회 여부" disabled={draft.normalDisplay !== "X"} value={draft.normalDisplay === "X" ? draft.posChecked : ""} values={["조회함", "조회불가"]} onChange={updatePosChecked} /></section>
-    <section className="panel"><h2 className="section-title-row">④ 사진자료 {missing.length > 0 && <span className="inline-missing">사진누락: {missing.join(", ")}</span>}</h2>{!draft.normalDisplay && <p className="notice">먼저 ② 실물 확인에서 정상진열 O/X를 선택하면 필요한 사진 입력칸이 표시됩니다.</p>}{draft.normalDisplay === "O" && <p className="small-help barcode-help">참고: 제품정보사진 촬영 시 브라우저가 지원하면 바코드를 자동 비교합니다.</p>}{photoMessage && draft.normalDisplay === "O" && <p className="ok upload-message">{photoMessage}</p>}{draft.normalDisplay === "O" && <><PhotoSlot id="photo-product-display" label="제품진열사진" description="가격정보와 진열상품이 동시노출 되도록 촬영" photo={itemPhotos.display} onFile={(file) => upload("PRODUCT_DISPLAY", file)} onDelete={(photo) => { setDeletedPhotoIds((old) => photo.id.startsWith("temp_") ? old : [...old, photo.id]); setLocalPhotos((old) => old.filter((candidate) => candidate.id !== photo.id)); }} /><PhotoSlot id="photo-product-info" label="제품정보사진" description="상품후면 제품상세정보와 바코드 동시노출 되도록 촬영" photo={itemPhotos.info} onFile={(file) => upload("PRODUCT_INFO_BARCODE", file)} onDelete={(photo) => { setDeletedPhotoIds((old) => photo.id.startsWith("temp_") ? old : [...old, photo.id]); setLocalPhotos((old) => old.filter((candidate) => candidate.id !== photo.id)); }} /></>}{draft.normalDisplay === "X" && <PhotoSlot id="photo-pos-receipt" label="POS/영수증사진" description="제품진열사진으로 가격정보 확인불가 시 POS기 또는 영수증 촬영" photo={itemPhotos.pos} onFile={(file) => upload("POS_RECEIPT", file)} onDelete={(photo) => { setDeletedPhotoIds((old) => photo.id.startsWith("temp_") ? old : [...old, photo.id]); setLocalPhotos((old) => old.filter((candidate) => candidate.id !== photo.id)); }} />}</section>
+    <section className="panel">
+      <h2 className="section-title-row">④ 사진자료 {missing.length > 0 && <span className="inline-missing">사진누락: {missing.join(", ")}</span>}</h2>
+      {!draft.normalDisplay && <p className="notice">먼저 ② 실물 확인에서 진열여부 O/X를 선택해 주세요.</p>}
+      {draft.normalDisplay === "O" && <p className="small-help barcode-help">참고: 제품정보사진 촬영 시 브라우저가 지원하면 바코드를 자동 비교합니다.</p>}
+      {photoMessage && draft.normalDisplay === "O" && <p className="ok upload-message">{photoMessage}</p>}
+      <PhotoSlot id="photo-product-display" label="제품진열사진" description="가격정보와 진열상품이 동시노출 되도록 촬영" disabled={draft.normalDisplay !== "O"} photo={itemPhotos.display} onFile={(file) => upload("PRODUCT_DISPLAY", file)} onDelete={(photo) => { setDeletedPhotoIds((old) => photo.id.startsWith("temp_") ? old : [...old, photo.id]); setLocalPhotos((old) => old.filter((candidate) => candidate.id !== photo.id)); }} />
+      <PhotoSlot id="photo-product-info" label="제품정보사진" description="상품후면 제품상세정보와 바코드 동시노출 되도록 촬영" disabled={draft.normalDisplay !== "O"} photo={itemPhotos.info} onFile={(file) => upload("PRODUCT_INFO_BARCODE", file)} onDelete={(photo) => { setDeletedPhotoIds((old) => photo.id.startsWith("temp_") ? old : [...old, photo.id]); setLocalPhotos((old) => old.filter((candidate) => candidate.id !== photo.id)); }} />
+      <PhotoSlot id="photo-pos-receipt" label="POS/영수증사진" description="제품진열사진으로 가격정보 확인불가 시 POS기 또는 영수증 촬영" disabled={!draft.normalDisplay} photo={itemPhotos.pos} onFile={(file) => upload("POS_RECEIPT", file)} onDelete={(photo) => { setDeletedPhotoIds((old) => photo.id.startsWith("temp_") ? old : [...old, photo.id]); setLocalPhotos((old) => old.filter((candidate) => candidate.id !== photo.id)); }} />
+    </section>
     <section className={`panel price-panel ${priceBlocked ? "disabled-block" : ""}`}>
       <h2>⑤ 가격</h2>
       <p className="price-base">기준가격: <strong>{draft.basePrice?.toLocaleString() ?? "-"}원</strong></p>
@@ -1711,9 +1729,9 @@ function ItemEditor({ item, storeItems, photos, onSave, onSaved, onList, onStore
   </main>;
 }
 
-function PhotoSlot({ id, label, description, photo, onFile, onDelete }: { id: string; label: string; description: string; photo?: SurveyPhoto; onFile: (file: File) => void | Promise<void>; onDelete: (photo: SurveyPhoto) => void | Promise<void> }) {
+function PhotoSlot({ id, label, description, disabled, photo, onFile, onDelete }: { id: string; label: string; description: string; disabled?: boolean; photo?: SurveyPhoto; onFile: (file: File) => void | Promise<void>; onDelete: (photo: SurveyPhoto) => void | Promise<void> }) {
   return (
-    <div id={`${id}-slot`} className={`photo-slot ${photo ? "uploaded" : ""}`}>
+    <div id={`${id}-slot`} className={`photo-slot ${photo ? "uploaded" : ""} ${disabled ? "photo-disabled" : ""}`}>
       <div>
         <div className="photo-title">
           <strong>{label}</strong>
@@ -1722,8 +1740,9 @@ function PhotoSlot({ id, label, description, photo, onFile, onDelete }: { id: st
       </div>
       {photo && <PhotoPreview photo={photo} className="wide-preview" />}
       <div className="photo-actions">
-        {!photo && <PhotoInput id={id} label="촬영/선택" onFile={onFile} />}
-        {photo && <button className="danger" onClick={() => onDelete(photo)}>지우기</button>}
+        {!photo && !disabled && <PhotoInput id={id} label="촬영/선택" onFile={onFile} />}
+        {photo && !disabled && <button className="danger" onClick={() => onDelete(photo)}>지우기</button>}
+        {disabled && <span className="photo-disabled-note">진열여부 선택에 따라 비활성화됨</span>}
       </div>
     </div>
   );

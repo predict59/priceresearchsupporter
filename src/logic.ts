@@ -16,12 +16,11 @@ export function productPhotoMissingLabels(item: SurveyItem, photos: SurveyPhoto[
   const photoCase = photoCaseOf(item);
   const hasDisplay = photos.some((photo) => photo.type === "PRODUCT_DISPLAY" && photo.itemId === item.id);
   const hasInfo = photos.some((photo) => photo.type === "PRODUCT_INFO_BARCODE" && photo.itemId === item.id);
-  const hasPos = photos.some((photo) => photo.type === "POS_RECEIPT" && photo.itemId === item.id);
   const missing: string[] = [];
   if (photoCase === "MISSING") {
     missing.push("물품 사진 전체 누락");
   } else if (photoCase === "POS_ONLY") {
-    if (!hasPos) missing.push("POS/영수증사진");
+    return missing;
   } else {
     if (!hasDisplay) missing.push("제품진열사진");
     if (!hasInfo) missing.push("제품정보사진");
