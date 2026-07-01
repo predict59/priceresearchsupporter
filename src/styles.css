@@ -1324,8 +1324,8 @@ textarea { min-height: 110px; resize: vertical; }
 .item-action-fab {
   position: fixed;
   left: 50%;
-  width: min(680px, calc(100% - 56px));
-  max-width: calc(100% - 56px);
+  width: min(680px, calc(100dvw - 32px));
+  max-width: calc(100dvw - 32px);
   transform: translateX(-50%);
   bottom: 14px;
   z-index: 25;
@@ -1363,16 +1363,22 @@ textarea { min-height: 110px; resize: vertical; }
 }
 .save-toast {
   position: fixed;
-  right: 16px;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
   bottom: 84px;
   z-index: 26;
-  max-width: min(320px, calc(100vw - 32px));
-  border-radius: 999px;
+  width: fit-content;
+  max-width: calc(100dvw - 32px);
+  border-radius: 18px;
   background: #ecfdf5;
   color: #166534;
   border: 1px solid #86efac;
   padding: 10px 14px;
   font-weight: 900;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
   box-shadow: 0 12px 28px rgba(15, 23, 42, .14);
 }
 .danger-toast {
@@ -1709,7 +1715,13 @@ textarea { min-height: 110px; resize: vertical; }
   }
   .price-feedback { margin-left: 0; }
   .save-fab { right: 12px; bottom: 14px; }
-  .save-toast { right: 12px; bottom: 78px; }
+  .save-toast {
+    left: 50%;
+    right: auto;
+    bottom: 78px;
+    width: fit-content;
+    max-width: calc(100dvw - 24px);
+  }
   .date-range {
     grid-template-columns: minmax(0, 1fr) 16px minmax(0, 1fr);
     gap: 5px;
@@ -1732,11 +1744,11 @@ textarea { min-height: 110px; resize: vertical; }
     padding-right: 10px;
   }
   .item-action-fab {
-    left: 10px;
+    left: 50%;
     right: auto;
     width: calc(100dvw - 20px);
     max-width: calc(100dvw - 20px);
-    transform: none;
+    transform: translateX(-50%);
     grid-template-columns: 1fr 1.2fr 1fr;
     border-radius: 16px;
     gap: 6px;
