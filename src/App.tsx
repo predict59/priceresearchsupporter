@@ -205,7 +205,7 @@ function App() {
     const searchText = [
       store.storeName,
       store.storeAddress,
-      ...ownItems.flatMap((item) => [item.itemNo, item.productName, item.barcode, item.companyName, item.companyManager, item.companyTel]),
+      ...ownItems.flatMap((item) => [item.itemNo, item.productName, item.barcode, item.companyName, item.companyManager, item.companyTel, item.martTel]),
     ].join(" ");
     if (!searchText.includes(storeQuery)) return false;
     const ownPhotos = photos.filter((photo) => photo.storeId === store.id);
@@ -301,7 +301,7 @@ function App() {
         return first ? { ...store, storeAddress: first.storeAddress || store.storeAddress, storeName: first.storeName || store.storeName } : store;
       });
       await saveParsedData(rebuilt.regions, parsedStores, parsedItems);
-      setAnalysis(`자료 분석 완료: 전체 품목 ${parsedItems.length.toLocaleString()}개 / 지역 ${rebuilt.regions.length}개 / 방문지 ${parsedStores.length}개 / 제조사 연락처 매칭 ${Math.max(0, matched)}개`);
+      setAnalysis(`자료 분석 완료: 전체 품목 ${parsedItems.length.toLocaleString()}개 / 지역 ${rebuilt.regions.length}개 / 방문지 ${parsedStores.length}개 / 연락처 매칭 ${Math.max(0, matched)}개`);
       await refresh(rebuilt.regions[0]?.name);
       setView("regions");
     } catch (error) {
@@ -811,7 +811,7 @@ function App() {
             </section>
           )}
           <div className="list">
-            {storeItems.filter((item) => `${item.itemNo} ${item.productName} ${item.barcode} ${item.companyManager} ${item.companyName} ${item.companyTel}`.includes(itemQuery)).filter((item) => filter === "전체" || (filter === "미완료" ? item.status !== "완료" : filter === "사진누락" ? requiredPhotoLabels(item, photos.filter((photo) => photo.storeId === item.storeId)).length > 0 : item.status === filter)).map((item) => {
+            {storeItems.filter((item) => `${item.itemNo} ${item.productName} ${item.barcode} ${item.companyManager} ${item.companyName} ${item.companyTel} ${item.martTel}`.includes(itemQuery)).filter((item) => filter === "전체" || (filter === "미완료" ? item.status !== "완료" : filter === "사진누락" ? requiredPhotoLabels(item, photos.filter((photo) => photo.storeId === item.storeId)).length > 0 : item.status === filter)).map((item) => {
               const previewPhoto = photos.find((photo) => photo.itemId === item.id && ["PRODUCT_DISPLAY", "PRODUCT_INFO_BARCODE", "POS_RECEIPT"].includes(photo.type));
               const eligibility = getPriceEligibility(item);
               return (
@@ -1167,19 +1167,20 @@ function SummaryModal({ region, stats, storeCount, completedStoreCount, onClose 
 }
 
 function Contacts({ items }: { items: SurveyItem[] }) {
-  const contacts = Array.from(new Map(items.map((item) => [`${item.companyName}|${item.companyManager}|${item.companyTel}`, item])).values());
+  const contacts = Array.from(new Map(items.map((item) => [`${item.companyName}|${item.companyManager}|${item.companyTel}|${item.martTel}`, item])).values());
   return (
     <section className="panel">
       <h2>마트 연락처</h2>
       {contacts.length === 0 && <p className="warn">확인 필요: 연락처 정보가 없습니다.</p>}
       {contacts.map((item) => {
-        const count = items.filter((candidate) => candidate.companyName === item.companyName && candidate.companyManager === item.companyManager && candidate.companyTel === item.companyTel).length;
+        const count = items.filter((candidate) => candidate.companyName === item.companyName && candidate.companyManager === item.companyManager && candidate.companyTel === item.companyTel && candidate.martTel === item.martTel).length;
         return (
-          <div className="contact" key={`${item.companyName}-${item.companyManager}-${item.companyTel}`}>
+          <div className="contact" key={`${item.companyName}-${item.companyManager}-${item.companyTel}-${item.martTel}`}>
             <dl className="contact-info">
               <dt>제조사</dt><dd>{item.companyName || "확인 필요"}</dd>
               <dt>담당자</dt><dd>{item.companyManager || "확인 필요"}</dd>
-              <dt>전화</dt><dd>{item.companyTel ? <a href={`tel:${item.companyTel.replace(/[^\d+]/g, "")}`}><Phone size={15} />{item.companyTel}</a> : <span className="warn">확인 필요</span>}</dd>
+              <dt>담당자 연락처</dt><dd>{item.companyTel ? <a href={`tel:${item.companyTel.replace(/[^\d+]/g, "")}`}><Phone size={15} />{item.companyTel}</a> : <span className="warn">확인 필요</span>}</dd>
+              <dt>마트 연락처</dt><dd>{item.martTel ? <a href={`tel:${item.martTel.replace(/[^\d+]/g, "")}`}><Phone size={15} />{item.martTel}</a> : <span className="warn">확인 필요</span>}</dd>
               <dt>품목</dt><dd>{count.toLocaleString()}개</dd>
             </dl>
           </div>
@@ -1190,15 +1191,18 @@ function Contacts({ items }: { items: SurveyItem[] }) {
 }
 
 function ItemContact({ item }: { item: SurveyItem }) {
-  const hasAnyContact = Boolean(item.companyName || item.companyManager || item.companyTel);
+  const hasAnyContact = Boolean(item.companyName || item.companyManager || item.companyTel || item.martTel);
   return (
-    <section className={`item-contact ${hasAnyContact && item.companyTel ? "" : "needs-check"}`}>
+    <section className={`item-contact ${hasAnyContact && (item.companyTel || item.martTel) ? "" : "needs-check"}`}>
       <div>
         <h2>담당자 정보</h2>
         <strong>{item.companyName || "제조사 확인 필요"}</strong>
         <span>담당자: {item.companyManager || "확인 필요"}</span>
       </div>
-      {item.companyTel ? <a href={`tel:${item.companyTel.replace(/[^\d+]/g, "")}`}><Phone size={15} />{item.companyTel}</a> : <span className="warn">연락처 확인 필요</span>}
+      <div className="item-contact-links">
+        {item.companyTel ? <a href={`tel:${item.companyTel.replace(/[^\d+]/g, "")}`}><Phone size={15} />담당자 {item.companyTel}</a> : <span className="warn">담당자 연락처 확인 필요</span>}
+        {item.martTel ? <a href={`tel:${item.martTel.replace(/[^\d+]/g, "")}`}><Phone size={15} />마트 {item.martTel}</a> : <span className="warn">마트 연락처 확인 필요</span>}
+      </div>
     </section>
   );
 }
@@ -1469,7 +1473,7 @@ function PhotoSlot({ id, label, description, photo, onFile, onDelete }: { id: st
 }
 
 function Info({ item }: { item: SurveyItem }) {
-  return <dl className="info"><dt>제조사</dt><dd>{item.companyName}</dd><dt>제조사 연락처</dt><dd>{item.companyTel}</dd><dt>마트명</dt><dd>{item.martName}</dd><dt>바코드</dt><dd>{item.barcode}</dd><dt>물품명</dt><dd>{item.productName}</dd><dt>규격</dt><dd>{item.spec}</dd><dt>기준가격</dt><dd>{item.basePrice !== null ? `${item.basePrice.toLocaleString()}원` : "-"}</dd></dl>;
+  return <dl className="info"><dt>제조사</dt><dd>{item.companyName}</dd><dt>담당자</dt><dd>{item.companyManager || "-"}</dd><dt>담당자 연락처</dt><dd>{item.companyTel || "-"}</dd><dt>마트명</dt><dd>{item.martName}</dd><dt>마트 연락처</dt><dd>{item.martTel || "-"}</dd><dt>바코드</dt><dd>{item.barcode}</dd><dt>물품명</dt><dd>{item.productName}</dd><dt>규격</dt><dd>{item.spec}</dd><dt>기준가격</dt><dd>{item.basePrice !== null ? `${item.basePrice.toLocaleString()}원` : "-"}</dd></dl>;
 }
 
 function DiscountControls({

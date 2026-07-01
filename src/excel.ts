@@ -54,9 +54,10 @@ const SHEET_REGION_ALIASES = new Map([
 const aliases: Record<string, string[]> = {
   itemNo: ["순번", "번호", "품목번호", "연번", "no"],
   companyName: ["업체명", "회사명", "제조회사", "제조사", "공급업체"],
-  companyTel: ["업체연락처", "담당자연락처", "연락처", "전화번호", "업체전화", "마트번호", "TEL"],
+  companyTel: ["업체연락처", "담당자연락처", "담당자 연락처", "연락처", "전화번호", "업체전화", "TEL"],
   companyManager: ["담당자", "담당", "업체담당자"],
   martName: ["마트명", "판매처", "조사처", "매장명", "방문지", "마트"],
+  martTel: ["마트번호", "마트 연락처", "마트연락처", "판매처번호", "판매처연락처", "매장번호", "매장연락처"],
   barcode: ["바코드", "barcode", "상품코드"],
   productName: ["물품명", "품목명", "상품명", "제품명"],
   spec: ["규격", "용량", "단위"],
@@ -167,6 +168,7 @@ export async function parseSurveyWorkbook(file: File): Promise<{ regions: Region
       companyTel: pick(row, "companyTel"),
       companyManager: pick(row, "companyManager"),
       martName,
+      martTel: pick(row, "martTel"),
       barcode,
       productName,
       spec: pick(row, "spec"),
@@ -199,8 +201,8 @@ export async function parseSurveyWorkbook(file: File): Promise<{ regions: Region
 }
 
 export function mergeContacts(items: SurveyItem[], contactFileRows: Row[]) {
-  const contacts = new Map<string, { tel: string; manager: string; address: string; martName: string; region: string; city: string; department: string }>();
-  const byItemNo = new Map<string, { tel: string; manager: string; address: string; martName: string; region: string; city: string; department: string }>();
+  const contacts = new Map<string, { tel: string; manager: string; address: string; martName: string; martTel: string; region: string; city: string; department: string }>();
+  const byItemNo = new Map<string, { tel: string; manager: string; address: string; martName: string; martTel: string; region: string; city: string; department: string }>();
   contactFileRows.forEach((row) => {
     const company = pick(row, "companyName");
     const resolved = resolveSurveyRegion(pick(row, "city"), pick(row, "district"), clean(row.__sheetName));
@@ -209,6 +211,7 @@ export function mergeContacts(items: SurveyItem[], contactFileRows: Row[]) {
       manager: pick(row, "companyManager"),
       address: pick(row, "address"),
       martName: pick(row, "martName"),
+      martTel: pick(row, "martTel"),
       region: resolved.name,
       city: resolved.city || pick(row, "city"),
       department: resolved.department || pick(row, "department"),
@@ -228,6 +231,7 @@ export function mergeContacts(items: SurveyItem[], contactFileRows: Row[]) {
           department: contact.department || item.department,
           companyTel: item.companyTel || contact.tel,
           companyManager: item.companyManager || contact.manager,
+          martTel: item.martTel || contact.martTel,
           storeAddress: item.storeAddress || contact.address,
           martName: item.martName || contact.martName,
           storeName: item.storeName || contact.martName,

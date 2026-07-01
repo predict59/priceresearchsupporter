@@ -605,6 +605,9 @@ textarea { min-height: 110px; resize: vertical; }
   display: grid;
   gap: 3px;
 }
+.item-contact-links {
+  justify-items: end;
+}
 .item-contact h2 {
   margin: 0 0 6px;
   font-size: 15px;

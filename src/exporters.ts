@@ -10,6 +10,12 @@ function photoOf(photos: SurveyPhoto[], type: SurveyPhoto["type"], item?: Survey
   return photos.find((photo) => photo.type === type && (item ? photo.itemId === item.id : true) && (store ? photo.storeId === store.id : true));
 }
 
+function districtFromAddress(address: string) {
+  const cleaned = address.replace(/^\(\d{5}\)\s*/, "").trim();
+  const match = cleaned.match(/(?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)[^\s]*\s+([^\s]+(?:시|군|구))/);
+  return match?.[1] ?? "";
+}
+
 export async function exportRegionExcel(region: string, items: SurveyItem[]) {
   const group = [
     "기준 정보",
@@ -34,11 +40,16 @@ export async function exportRegionExcel(region: string, items: SurveyItem[]) {
     "정상진열 안될 시",
     "특이사항",
     "조사일",
+    "마트정보",
+    "마트정보",
+    "마트정보",
+    "업체정보",
+    "업체정보",
   ];
   const headers = [
     "순번",
-    "제조사",
-    "제조사연락처",
+    "업체명",
+    "업체연락처",
     "마트명",
     "바코드",
     "물품명",
@@ -58,6 +69,11 @@ export async function exportRegionExcel(region: string, items: SurveyItem[]) {
     "비정상",
     "특이사항",
     "조사일",
+    "광역",
+    "시군구",
+    "주소",
+    "담당자",
+    "업체 연락처",
   ];
   const rows = items.map((item) => [
     item.itemNo,
@@ -82,6 +98,11 @@ export async function exportRegionExcel(region: string, items: SurveyItem[]) {
     item.abnormalDisplay === "O" ? "O" : "",
     item.memo,
     item.status === "미조사" ? "" : item.surveyDate,
+    item.city ?? "",
+    districtFromAddress(item.storeAddress),
+    item.storeAddress,
+    item.companyManager ?? "",
+    item.companyTel || item.martTel || "",
   ]);
   const ws = XLSX.utils.aoa_to_sheet([group, headers, ...rows]);
   ws["!merges"] = [
@@ -89,6 +110,8 @@ export async function exportRegionExcel(region: string, items: SurveyItem[]) {
     { s: { r: 0, c: 8 }, e: { r: 0, c: 10 } },
     { s: { r: 0, c: 11 }, e: { r: 0, c: 15 } },
     { s: { r: 0, c: 16 }, e: { r: 0, c: 19 } },
+    { s: { r: 0, c: 22 }, e: { r: 0, c: 24 } },
+    { s: { r: 0, c: 25 }, e: { r: 0, c: 26 } },
   ];
   ws["!cols"] = headers.map((header) => ({ wch: Math.max(10, header.length + 4) }));
   const wb = XLSX.utils.book_new();

@@ -44,6 +44,7 @@ export type SurveyItem = {
   companyTel: string;
   companyManager?: string;
   martName: string;
+  martTel?: string;
   barcode: string;
   productName: string;
   spec: string;
