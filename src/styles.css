@@ -24,6 +24,18 @@ button, .button {
 button:disabled { opacity: .45; cursor: not-allowed; }
 .primary { background: #0f766e; border-color: #0f766e; color: #fff; }
 .danger { background: #b91c1c; border-color: #b91c1c; color: #fff; }
+.danger-light {
+  background: #fff1f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+  font-weight: 900;
+}
+.warning-light {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
+  font-weight: 900;
+}
 .topbar {
   position: sticky;
   top: 0;
@@ -733,6 +745,52 @@ textarea { min-height: 110px; resize: vertical; }
   line-height: 1.5;
   word-break: keep-all;
   overflow-wrap: anywhere;
+}
+.store-operating {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+.store-operating span {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 900;
+}
+.operating-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 12px;
+  font-weight: 900;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.operating-badge.small {
+  margin-left: 5px;
+  transform: translateY(-1px);
+}
+.operating-영업중 {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #86efac;
+}
+.operating-폐업 {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+.operating-임시휴업 {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+.store-state-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
 }
 .meta-label {
   color: #64748b;

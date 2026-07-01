@@ -1,5 +1,6 @@
 export type Status = "미조사" | "조사중" | "완료";
 export type StoreStatus = "미시작" | "진행중" | "완료";
+export type StoreOperatingStatus = "영업 중" | "폐업" | "임시휴업";
 export type PhotoType = "STORE_FRONT" | "PRODUCT_DISPLAY" | "PRODUCT_INFO_BARCODE" | "POS_RECEIPT";
 export type PhotoCase = "" | "NORMAL" | "POS_ONLY" | "MISSING";
 
@@ -19,6 +20,7 @@ export type SurveyStore = {
   storeName: string;
   storeAddress: string;
   visitOrder?: number;
+  operatingStatus?: StoreOperatingStatus;
   itemCount: number;
   completedCount: number;
   surveyDate: string;

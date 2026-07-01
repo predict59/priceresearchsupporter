@@ -5,7 +5,7 @@ import { clearAllData, deletePhoto, getItems, getPhotosByRegion, getPhotosByStor
 import { parseContactRows, parseSurveyWorkbook, mergeContacts, rebuildStoresAndRegions } from "./excel";
 import { dataUrlToBlob, exportBackup, exportRegionExcel, exportRegionZip } from "./exporters";
 import { mapSearchAddress, requiredPhotoLabels, summarize } from "./logic";
-import type { AppSettings, BackupPayload, PhotoType, Region, RegionStats, SurveyItem, SurveyPhoto, SurveyStore } from "./types";
+import type { AppSettings, BackupPayload, PhotoType, Region, RegionStats, StoreOperatingStatus, SurveyItem, SurveyPhoto, SurveyStore } from "./types";
 
 type View = "upload" | "regions" | "workspace" | "store" | "items" | "item" | "backup" | "validation";
 type Filter = "전체" | "미완료" | "미조사" | "조사중" | "완료" | "사진누락";
@@ -33,6 +33,11 @@ const EXCEL_ACCEPT = ".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocum
 const PHOTO_MAX_EDGE = 1800;
 const PHOTO_JPEG_QUALITY = 0.82;
 const PRICE_DIFF_WARN_PERCENT = 30;
+const appendMemoText = (memo: string, text: string) => {
+  const parts = memo.split("/").map((part) => part.trim()).filter(Boolean);
+  if (parts.includes(text)) return memo;
+  return parts.length ? `${parts.join(" / ")} / ${text}` : text;
+};
 type BarcodeDetectorConstructor = new (options?: { formats?: string[] }) => {
   detect: (source: ImageBitmapSource) => Promise<Array<{ rawValue: string }>>;
 };
@@ -399,6 +404,44 @@ function App() {
     return true;
   }
 
+  async function applyStoreOperatingStatus(status: Exclude<StoreOperatingStatus, "영업 중">) {
+    if (!selectedStore) return;
+    const memoText = status === "폐업" ? "판매처 폐점" : "임시휴업";
+    const ok = await askConfirm({
+      title: `${status} 처리할까요?`,
+      message: `${selectedStore.storeName} 하위 모든 품목을 일괄 변경합니다.\n\n이미 입력한 가격정보가 있어도 정상진열 X, 바코드등록여부 X, 판매여부 미판매, 특이사항 ${memoText} 상태로 바뀝니다.`,
+      confirmText: `${status} 처리`,
+      cancelText: "취소",
+      danger: true,
+    });
+    if (!ok) return;
+    const surveyDate = selectedStore.surveyDate || today();
+    const changedItems = storeItems.map((item) => ({
+      ...item,
+      surveyDate,
+      normalDisplay: "X" as const,
+      specMatch: "" as const,
+      barcodeMatch: "" as const,
+      normalPrice: null,
+      hasDiscount: null,
+      discountPrice: null,
+      discountStartDate: "",
+      discountEndDate: "",
+      discountType: "",
+      discountOral: false,
+      barcodeRegistered: "X" as const,
+      abnormalStatus: "미판매" as const,
+      posChecked: "조회불가" as const,
+      abnormalDisplay: "" as const,
+      memo: appendMemoText(item.memo, memoText),
+      status: "완료" as const,
+      updatedAt: now(),
+    }));
+    await putStore({ ...selectedStore, operatingStatus: status, status: "완료", updatedAt: now() });
+    await Promise.all(changedItems.map(putItem));
+    await refresh(selectedStore.region);
+  }
+
   async function doExportExcel(region = currentRegion) {
     if (!region) return;
     await exportRegionExcel(region, items.filter((item) => item.region === region));
@@ -652,6 +695,10 @@ function App() {
         <main className="page narrow">
           <section className="panel">
             <h1>{selectedStore.storeName}</h1>
+            <div className="store-operating">
+              <span>현재상태</span>
+              <strong className={`operating-badge ${operatingClass(selectedStore.operatingStatus)}`}>{selectedStore.operatingStatus ?? "영업 중"}</strong>
+            </div>
             <div className="store-address"><span>주소</span><strong>{selectedStore.storeAddress || "-"}</strong></div>
             <h2>업체 전경사진</h2>
             {(() => {
@@ -666,6 +713,10 @@ function App() {
             </div>
               );
             })()}
+            <div className="store-state-actions">
+              <button type="button" className="danger-light" onClick={() => applyStoreOperatingStatus("폐업")}>폐업 처리</button>
+              <button type="button" className="warning-light" onClick={() => applyStoreOperatingStatus("임시휴업")}>임시휴업 처리</button>
+            </div>
           </section>
           <Contacts items={storeItems} />
           <section className="panel">
@@ -703,7 +754,7 @@ function App() {
                     <dl className="item-mini-info">
                       <dt>바코드</dt><dd>{item.barcode || "-"}</dd>
                       <dt>기준가격</dt><dd>{item.basePrice?.toLocaleString() ?? "-"}원</dd>
-                      <dt>조사가격</dt><dd>{item.normalPrice?.toLocaleString() ?? "-"}원 {eligibility && <span className={`eligibility-badge ${eligibility === "부적격" ? "bad" : "good"}`}>{eligibility}</span>}</dd>
+                      <dt>조사가격</dt><dd>{item.normalPrice?.toLocaleString() ?? "-"}원 {eligibility && <span className={`eligibility-badge ${eligibility.label === "부적격" ? "bad" : "good"}`} title={eligibility.reason}>{eligibility.label}</span>}</dd>
                     </dl>
                   </div>
                   <button className="primary" onClick={() => { setSelectedItemId(item.id); setView("item"); }}>입력</button>
@@ -894,9 +945,28 @@ function Badge({ text }: { text: string }) {
   return <span className={`badge badge-${text}`}>{text}</span>;
 }
 
+function getSurveySalePrice(item: SurveyItem) {
+  let price = item.normalPrice;
+  const longDiscount = item.hasDiscount && item.discountType.replace("구두", "") === "②" && item.discountPrice !== null;
+  if (longDiscount) price = item.discountPrice;
+  if (item.memo.includes("1+1") && price !== null) price = Math.round(price / 2);
+  return price;
+}
+
 function getPriceEligibility(item: SurveyItem) {
-  if (item.basePrice === null || item.normalPrice === null) return "";
-  return item.normalPrice < item.basePrice ? "부적격" : "적격";
+  if (item.abnormalStatus === "미판매") return { label: "부적격", reason: "미판매" };
+  if (item.abnormalStatus === "미진열") return { label: "부적격", reason: "미진열" };
+  if (item.barcodeRegistered === "X") return { label: "부적격", reason: "바코드 미등록" };
+  if (item.memo.includes("판매처 폐점")) return { label: "부적격", reason: "폐업" };
+  if (item.memo.includes("임시휴업")) return { label: "부적격", reason: "임시휴업" };
+  const salePrice = getSurveySalePrice(item);
+  if (item.basePrice === null || salePrice === null) return undefined;
+  if (salePrice < item.basePrice) return { label: "부적격", reason: "저가판매" };
+  return { label: "적격", reason: "정상 판매 및 정상 가격" };
+}
+
+function operatingClass(status?: StoreOperatingStatus) {
+  return `operating-${(status ?? "영업 중").replace(/\s/g, "")}`;
 }
 
 function StoreCard({
@@ -956,7 +1026,7 @@ function StoreCard({
     <article id={`store-card-${store.id}`} className={`card store-card ${focused ? "focused" : ""}`}>
       <div className="card-head">
         <div>
-          <h2>{store.storeName}</h2>
+          <h2>{store.storeName} <span className={`operating-badge small ${operatingClass(store.operatingStatus)}`}>{store.operatingStatus ?? "영업 중"}</span></h2>
           <p>{store.storeAddress || "주소 없음"}</p>
         </div>
         <details className="card-menu">

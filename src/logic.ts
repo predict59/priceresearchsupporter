@@ -12,6 +12,7 @@ export function requiredPhotoLabels(item: SurveyItem, photos: SurveyPhoto[]) {
 }
 
 export function productPhotoMissingLabels(item: SurveyItem, photos: SurveyPhoto[]) {
+  if (item.memo.includes("판매처 폐점") || item.memo.includes("임시휴업")) return [];
   const photoCase = photoCaseOf(item);
   const hasDisplay = photos.some((photo) => photo.type === "PRODUCT_DISPLAY" && photo.itemId === item.id);
   const hasInfo = photos.some((photo) => photo.type === "PRODUCT_INFO_BARCODE" && photo.itemId === item.id);
