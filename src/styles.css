@@ -61,6 +61,27 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .top-actions button:hover { background: #eef2f4; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .current { color: #52616b; font-size: 13px; font-weight: 800; white-space: nowrap; max-width: 170px; overflow: hidden; text-overflow: ellipsis; }
+.boot-screen {
+  min-height: 100dvh;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  color: #52616b;
+}
+.boot-screen strong {
+  color: #17202a;
+  font-size: 18px;
+}
+.loader-ring {
+  width: 42px;
+  height: 42px;
+  border: 4px solid #dbeafe;
+  border-top-color: #0f766e;
+  border-radius: 50%;
+  animation: spin .85s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 .page { width: min(1180px, 100%); margin: 0 auto; padding: 14px 14px 96px; }
 .narrow { width: min(760px, 100%); }
 .page-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
@@ -173,8 +194,8 @@ textarea { min-height: 110px; resize: vertical; }
 }
 .sticky-search .search { margin: 0; }
 .search input::placeholder {
-  color: #94a3b8;
-  font-size: 13px;
+  color: #b6c1ca;
+  font-size: 12px;
   font-weight: 700;
 }
 .tool-toggle { min-height: 44px; white-space: nowrap; }
@@ -503,10 +524,38 @@ textarea { min-height: 110px; resize: vertical; }
   color: #52616b;
   font-weight: 800;
 }
+.photo-title {
+  display: grid;
+  gap: 3px;
+}
+.photo-title small {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.photo-preview {
+  display: block;
+  width: 100%;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #dbe1e5;
+  background: #e5ebef;
+}
+.wide-preview {
+  max-height: 220px;
+}
+.item-thumb {
+  width: 92px;
+  height: 92px;
+}
 .photo-actions {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 8px;
+}
+.photo-actions:has(> button:only-child) {
+  grid-template-columns: 1fr;
 }
 .photo-actions .photo-button { margin: 0; min-height: 46px; }
 .upload-message { margin: 0 0 10px; }
@@ -549,6 +598,37 @@ textarea { min-height: 110px; resize: vertical; }
   font-weight: 800;
   word-break: break-word;
 }
+.meta-label {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 900;
+  margin-right: 6px;
+}
+.item-card-body {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+.item-card-body.no-thumb {
+  grid-template-columns: 1fr;
+}
+.item-mini-info {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 4px 8px;
+  margin: 0;
+  font-size: 13px;
+}
+.item-mini-info dt {
+  color: #64748b;
+  font-weight: 900;
+}
+.item-mini-info dd {
+  margin: 0;
+  color: #17202a;
+  font-weight: 800;
+}
 .field-row { display: grid; grid-template-columns: 120px 1fr; gap: 10px; align-items: center; margin-bottom: 12px; }
 .field-row > span {
   color: #64748b;
@@ -574,6 +654,34 @@ textarea { min-height: 110px; resize: vertical; }
   min-height: 36px;
 }
 .inline-check input { width: auto; min-height: auto; }
+.price-base {
+  margin: -2px 0 12px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 800;
+}
+.price-base strong {
+  color: #17202a;
+  font-size: 15px;
+}
+.price-feedback {
+  margin: -4px 0 12px 130px;
+  border-radius: 8px;
+  padding: 9px 10px;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.35;
+}
+.price-feedback.warn {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+}
+.price-feedback.ok {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .abnormal-block {
   padding-bottom: 14px;
@@ -594,6 +702,30 @@ textarea { min-height: 110px; resize: vertical; }
   min-height: 34px;
   font-size: 13px;
   background: #fff;
+}
+.storage-meter {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+}
+.storage-meter div {
+  border: 1px solid #dbe1e5;
+  border-radius: 8px;
+  padding: 10px;
+  background: #f8fafc;
+}
+.storage-meter strong {
+  display: block;
+  font-size: 18px;
+}
+.storage-meter span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+.storage-progress {
+  margin: 8px 0 12px;
 }
 .bottom-bar {
   position: fixed;
