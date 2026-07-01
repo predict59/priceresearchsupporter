@@ -31,7 +31,9 @@ const num = (value: string) => {
 };
 const EXCEL_ACCEPT = ".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream";
 const PHOTO_MAX_EDGE = 1280;
-const PHOTO_JPEG_QUALITY = 0.72;
+const PHOTO_TARGET_BYTES = 950 * 1024;
+const PHOTO_MIN_EDGE = 760;
+const PHOTO_QUALITY_STEPS = [0.72, 0.64, 0.56, 0.48, 0.4, 0.32];
 const PRICE_DIFF_WARN_PERCENT = 30;
 const TARGET_MAP_URL = "https://www.google.com/maps/d/u/1/viewer?mid=1ej99Lo6WS4GROBCQPr0a66MhQR_vXuM&ll=37.49945198941339%2C127.04262669775987&z=14";
 const appendMemoText = (memo: string, text: string) => {
@@ -131,17 +133,29 @@ async function resizePhoto(file: File) {
   if (!file.type.startsWith("image/")) return { blob: file, mimeType: file.type || "application/octet-stream", originalSize: file.size, resizedSize: file.size };
   const bitmap = await createImageBitmap(file);
   try {
-    const scale = Math.min(1, PHOTO_MAX_EDGE / Math.max(bitmap.width, bitmap.height));
-    const width = Math.max(1, Math.round(bitmap.width * scale));
-    const height = Math.max(1, Math.round(bitmap.height * scale));
+    const sourceEdge = Math.max(bitmap.width, bitmap.height);
+    const edgeSteps = [PHOTO_MAX_EDGE, 1150, 1024, 900, PHOTO_MIN_EDGE].filter((edge, index, array) => edge <= sourceEdge && array.indexOf(edge) === index);
+    if (!edgeSteps.length) edgeSteps.push(sourceEdge);
     const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
     const context = canvas.getContext("2d");
     if (!context) return { blob: file, mimeType: file.type || "application/octet-stream", originalSize: file.size, resizedSize: file.size };
-    context.drawImage(bitmap, 0, 0, width, height);
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", PHOTO_JPEG_QUALITY));
-    const output = blob && blob.size < file.size ? blob : file;
+    let best: Blob | null = null;
+    for (const maxEdge of edgeSteps) {
+      const scale = Math.min(1, maxEdge / sourceEdge);
+      const width = Math.max(1, Math.round(bitmap.width * scale));
+      const height = Math.max(1, Math.round(bitmap.height * scale));
+      canvas.width = width;
+      canvas.height = height;
+      context.clearRect(0, 0, width, height);
+      context.drawImage(bitmap, 0, 0, width, height);
+      for (const quality of PHOTO_QUALITY_STEPS) {
+        const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+        if (!blob) continue;
+        if (!best || blob.size < best.size) best = blob;
+        if (blob.size <= PHOTO_TARGET_BYTES) return { blob, mimeType: "image/jpeg", originalSize: file.size, resizedSize: blob.size };
+      }
+    }
+    const output = best && best.size < file.size ? best : file;
     return { blob: output, mimeType: output.type || file.type || "image/jpeg", originalSize: file.size, resizedSize: output.size };
   } finally {
     bitmap.close();
@@ -631,7 +645,9 @@ function App() {
   const menuItemStats = (view === "store" || view === "items" || view === "item") && selectedStore
     ? summarize(storeItems, photos.filter((photo) => photo.storeId === selectedStore.id))
     : currentRegion ? summarize(regionItems, photos) : emptyStats;
-  const menuContext = selectedStore?.storeName ?? selectedItem?.storeName;
+  const menuContext = view === "store" || view === "items" || view === "item"
+    ? (selectedStore?.storeName ?? selectedItem?.storeName)
+    : "";
   const menuProgressPercent =
     view === "regions"
       ? (menuAllRegionStats.total ? Math.round((menuAllRegionStats.completed / menuAllRegionStats.total) * 100) : 0)
@@ -662,7 +678,9 @@ function App() {
         </div>
         <div className="top-actions">
           <div className="menu-status">
-            <span>지역 <strong>{currentRegion || "-"}</strong></span>
+            {view === "regions"
+              ? <span>지역 <strong>{menuAllRegionStats.completed.toLocaleString()} / {menuAllRegionStats.total.toLocaleString()}</strong></span>
+              : <span>지역 <strong>{currentRegion || "-"}</strong></span>}
             {menuContext && <span>마트 <strong>{menuContext}</strong></span>}
             <div className="menu-progress"><i style={{ width: `${menuProgressPercent}%` }} /></div>
             {view === "regions" && <small>지역 {menuAllRegionStats.completed.toLocaleString()} / {menuAllRegionStats.total.toLocaleString()}</small>}
