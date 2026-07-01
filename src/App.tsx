@@ -176,7 +176,7 @@ function App() {
     const searchText = [
       store.storeName,
       store.storeAddress,
-      ...ownItems.flatMap((item) => [item.itemNo, item.productName, item.barcode]),
+      ...ownItems.flatMap((item) => [item.itemNo, item.productName, item.barcode, item.companyName, item.companyManager, item.companyTel]),
     ].join(" ");
     if (!searchText.includes(storeQuery)) return false;
     const ownPhotos = photos.filter((photo) => photo.storeId === store.id);
@@ -454,7 +454,7 @@ function App() {
     : view === "item" ? "가격정보"
     : view === "validation" ? "검증"
     : view === "backup" ? "백업/복원"
-    : "국군복지단 가격조사";
+    : "자료 업로드";
   const topContext =
     view === "store" || view === "items" || view === "item"
       ? `현재 업체: ${selectedStore?.storeName ?? selectedItem?.storeName ?? "-"}`
@@ -494,17 +494,30 @@ function App() {
       </header>
 
       {view === "upload" && (
-        <main className="page narrow">
-          <h1>국군복지단 가격조사 PWA</h1>
-          <section className="panel">
-            <label>조사표 엑셀 업로드<input type="file" accept={EXCEL_ACCEPT} onChange={(event) => setSurveyFile(event.target.files?.[0] ?? null)} /></label>
-            <label>업체 연락처 엑셀 업로드<input type="file" accept={EXCEL_ACCEPT} onChange={(event) => setContactFile(event.target.files?.[0] ?? null)} /></label>
-            <label>바코드 포함 조사표 업로드<input type="file" accept={EXCEL_ACCEPT} /></label>
-            <p className="hint">모바일에서 파일이 안 보이면 파일 앱의 다운로드/OneDrive/Google 드라이브에서 엑셀 파일을 먼저 내려받은 뒤 선택하세요.</p>
-            <button className="primary" onClick={analyzeFiles} disabled={isAnalyzing}><Upload size={18} />{isAnalyzing ? "자료 분석 중..." : "자료 분석 시작"}</button>
+        <main className="page narrow upload-page">
+          <section className="upload-hero">
+            <span>초기 설정</span>
+            <h1>조사자료 업로드</h1>
+            <p>최초 1회 조사표와 업체 연락처를 올리면 지역, 업체, 품목 목록이 이 기기에 저장됩니다. 이후에는 현장에서 오프라인으로 입력할 수 있어요.</p>
+          </section>
+          <section className="panel upload-panel">
+            <label className="file-card">조사표 엑셀
+              <input type="file" accept={EXCEL_ACCEPT} onChange={(event) => setSurveyFile(event.target.files?.[0] ?? null)} />
+              <span>{surveyFile?.name ?? "필수 파일을 선택하세요"}</span>
+            </label>
+            <label className="file-card">업체 연락처 엑셀
+              <input type="file" accept={EXCEL_ACCEPT} onChange={(event) => setContactFile(event.target.files?.[0] ?? null)} />
+              <span>{contactFile?.name ?? "연락처 파일이 있으면 함께 선택하세요"}</span>
+            </label>
+            <label className="file-card optional">바코드 포함 조사표
+              <input type="file" accept={EXCEL_ACCEPT} />
+              <span>선택사항</span>
+            </label>
+            <p className="hint">모바일에서 파일이 안 보이면 파일 앱의 다운로드, OneDrive, Google 드라이브에서 엑셀 파일을 먼저 내려받은 뒤 선택하세요.</p>
+            <button className="primary analyze-button" onClick={analyzeFiles} disabled={isAnalyzing}><Upload size={18} />{isAnalyzing ? "자료 분석 중..." : "자료 분석 시작"}</button>
             {analysis && <p className="notice">{analysis}</p>}
           </section>
-          <button disabled={!regions.length} onClick={() => setView("regions")}>지역 선택으로 이동</button>
+          <button className="continue-button" disabled={!regions.length} onClick={() => setView("regions")}>지역리스트로 이동</button>
         </main>
       )}
 
@@ -542,7 +555,7 @@ function App() {
       {view === "workspace" && currentRegion && (
         <main className="page">
           <div className="sticky-search workspace-search">
-            <SearchBox value={storeQuery} onChange={setStoreQuery} placeholder="업체명/주소명/품목명/품목코드/바코드" />
+            <SearchBox value={storeQuery} onChange={setStoreQuery} placeholder="업체명 / 주소 / 품목명 / 품목코드 / 바코드" />
             <button className="tool-toggle" onClick={() => setWorkspaceToolsOpen((value) => !value)} aria-expanded={workspaceToolsOpen}>
               <SlidersHorizontal size={18} /> 필터 {workspaceToolsOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </button>
@@ -605,15 +618,12 @@ function App() {
         <main className="page narrow">
           <section className="panel">
             <h1>{selectedStore.storeName}</h1>
-            <p><span className="meta-label">주소</span> {selectedStore.storeAddress || "-"}</p>
+            <div className="store-address"><span>주소</span><strong>{selectedStore.storeAddress || "-"}</strong></div>
             <h2>업체 전경사진</h2>
             {(() => {
               const frontPhoto = photos.find((photo) => photo.id === selectedStore.frontPhotoId);
               return (
             <div className={`photo-slot ${selectedStore.frontPhotoId ? "uploaded" : ""}`}>
-              <div>
-                <span>{selectedStore.frontPhotoId ? "업로드됨" : "미업로드"}</span>
-              </div>
               {frontPhoto && <PhotoPreview photo={frontPhoto} className="wide-preview" />}
               <div className="photo-actions">
                 {!selectedStore.frontPhotoId && <PhotoInput label="촬영/첨부" onFile={saveStorePhoto} />}
@@ -635,7 +645,7 @@ function App() {
       {view === "items" && selectedStore && (
         <main className="page">
           <div className="sticky-search item-search">
-            <SearchBox value={itemQuery} onChange={setItemQuery} placeholder="품목명 / 바코드 / 순번 검색" />
+            <SearchBox value={itemQuery} onChange={setItemQuery} placeholder="품목명 / 바코드 / 품목코드 / 담당자" />
             <button className="tool-toggle icon-button" onClick={() => setSummaryOpen(true)} aria-label="현황 보기"><InfoIcon size={18} /></button>
             <button className="tool-toggle" onClick={() => setItemToolsOpen((value) => !value)} aria-expanded={itemToolsOpen}>
               <SlidersHorizontal size={18} /> 필터 {itemToolsOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
@@ -648,8 +658,9 @@ function App() {
             </section>
           )}
           <div className="list">
-            {storeItems.filter((item) => `${item.itemNo} ${item.productName} ${item.barcode}`.includes(itemQuery)).filter((item) => filter === "전체" || (filter === "미완료" ? item.status !== "완료" : filter === "사진누락" ? requiredPhotoLabels(item, photos.filter((photo) => photo.storeId === item.storeId)).length > 0 : item.status === filter)).map((item) => {
+            {storeItems.filter((item) => `${item.itemNo} ${item.productName} ${item.barcode} ${item.companyManager} ${item.companyName} ${item.companyTel}`.includes(itemQuery)).filter((item) => filter === "전체" || (filter === "미완료" ? item.status !== "완료" : filter === "사진누락" ? requiredPhotoLabels(item, photos.filter((photo) => photo.storeId === item.storeId)).length > 0 : item.status === filter)).map((item) => {
               const previewPhoto = photos.find((photo) => photo.itemId === item.id && ["PRODUCT_DISPLAY", "PRODUCT_INFO_BARCODE", "POS_RECEIPT"].includes(photo.type));
+              const eligibility = getPriceEligibility(item);
               return (
                 <article className={`card compact item-card ${selectedItemId === item.id ? "focused" : ""}`} key={item.id}>
                   <div className="item-card-head"><h2 className="item-title"><span className="item-code">{item.itemNo}</span><span>{item.productName}</span></h2><Badge text={item.status} /></div>
@@ -658,7 +669,7 @@ function App() {
                     <dl className="item-mini-info">
                       <dt>바코드</dt><dd>{item.barcode || "-"}</dd>
                       <dt>기준가격</dt><dd>{item.basePrice?.toLocaleString() ?? "-"}원</dd>
-                      <dt>조사가격</dt><dd>{item.normalPrice?.toLocaleString() ?? "-"}원</dd>
+                      <dt>조사가격</dt><dd>{item.normalPrice?.toLocaleString() ?? "-"}원 {eligibility && <span className={`eligibility-badge ${eligibility === "부적격" ? "bad" : "good"}`}>{eligibility}</span>}</dd>
                     </dl>
                   </div>
                   <button className="primary" onClick={() => { setSelectedItemId(item.id); setView("item"); }}>입력</button>
@@ -830,6 +841,11 @@ function Badge({ text }: { text: string }) {
   return <span className={`badge badge-${text}`}>{text}</span>;
 }
 
+function getPriceEligibility(item: SurveyItem) {
+  if (item.basePrice === null || item.normalPrice === null) return "";
+  return item.normalPrice < item.basePrice ? "부적격" : "적격";
+}
+
 function StoreCard({
   store,
   stats,
@@ -968,10 +984,12 @@ function Contacts({ items }: { items: SurveyItem[] }) {
         const count = items.filter((candidate) => candidate.companyName === item.companyName && candidate.companyManager === item.companyManager && candidate.companyTel === item.companyTel).length;
         return (
           <div className="contact" key={`${item.companyName}-${item.companyManager}-${item.companyTel}`}>
-            <strong>{item.companyName || "업체명 확인 필요"}</strong>
-            <span>담당자: {item.companyManager || "확인 필요"}</span>
-            {item.companyTel ? <a href={`tel:${item.companyTel.replace(/[^\d+]/g, "")}`}><Phone size={15} />{item.companyTel}</a> : <span className="warn">전화: 확인 필요</span>}
-            <span>해당 품목: {count.toLocaleString()}개</span>
+            <dl className="contact-info">
+              <dt>업체명</dt><dd>{item.companyName || "확인 필요"}</dd>
+              <dt>담당자</dt><dd>{item.companyManager || "확인 필요"}</dd>
+              <dt>전화</dt><dd>{item.companyTel ? <a href={`tel:${item.companyTel.replace(/[^\d+]/g, "")}`}><Phone size={15} />{item.companyTel}</a> : <span className="warn">확인 필요</span>}</dd>
+              <dt>품목</dt><dd>{count.toLocaleString()}개</dd>
+            </dl>
           </div>
         );
       })}
@@ -1087,7 +1105,7 @@ function ItemEditor({ item, storeItems, photos, onPhoto, onDeletePhoto, onSave, 
         const percent = draft.basePrice ? Math.round((Math.abs(diff) / draft.basePrice) * 100) : 0;
         const messages = [diff < 0 ? "경고: 조사가격이 기준가격보다 작습니다." : diff > 0 ? "정상: 조사가격이 기준가격보다 큽니다." : "정상: 조사가격이 기준가격과 같습니다."];
         if (percent >= PRICE_DIFF_WARN_PERCENT) messages.push(`경고: 기준가격과 ${percent}% 차이납니다.`);
-        return { type: diff < 0 || percent >= PRICE_DIFF_WARN_PERCENT ? "warn" : "ok", text: messages.join(" ") };
+        return { type: diff < 0 || percent >= PRICE_DIFF_WARN_PERCENT ? "warn" : "ok", messages };
       })()
     : undefined;
   const handleSave = async () => {
@@ -1141,7 +1159,7 @@ function ItemEditor({ item, storeItems, photos, onPhoto, onDeletePhoto, onSave, 
     <section className="panel"><h2>② 실물 확인</h2><Choice label="정상진열" value={draft.normalDisplay} values={["O", "X"]} onChange={(value) => update({ normalDisplay: value as SurveyItem["normalDisplay"], photoCase: value === "X" ? "POS_ONLY" : value === "O" ? "NORMAL" : "", specMatch: value === "X" ? "" : draft.specMatch, barcodeMatch: value === "X" ? "" : draft.barcodeMatch, barcodeRegistered: value === "O" ? "" : draft.barcodeRegistered, abnormalStatus: value === "O" ? "" : draft.abnormalStatus, posChecked: value === "O" ? "" : draft.posChecked, posPrice: null, abnormalDisplay: value === "X" ? "" : draft.abnormalDisplay })} /><Choice label="규격일치" disabled={draft.normalDisplay !== "O"} value={draft.normalDisplay === "O" ? draft.specMatch : ""} values={["O", "X"]} onChange={(value) => update({ specMatch: value as SurveyItem["specMatch"] })} /><Choice label="바코드일치" disabled={draft.normalDisplay !== "O"} value={draft.normalDisplay === "O" ? draft.barcodeMatch : ""} values={["O", "X"]} onChange={(value) => update({ barcodeMatch: value as SurveyItem["barcodeMatch"] })} /></section>
     <section className={`panel ${draft.normalDisplay === "X" ? "" : "disabled-block"}`}><h2>③ 상태</h2><Choice label="바코드 등록 여부" disabled={draft.normalDisplay !== "X"} value={draft.normalDisplay === "X" ? draft.barcodeRegistered : ""} values={["O", "X"]} onChange={(value) => update({ barcodeRegistered: value as SurveyItem["barcodeRegistered"] })} /><Choice label="판매여부" disabled={draft.normalDisplay !== "X"} value={draft.normalDisplay === "X" ? draft.abnormalStatus : ""} values={["미진열", "미판매"]} onChange={(value) => update({ abnormalStatus: value as SurveyItem["abnormalStatus"] })} /><Choice label="POS 조회 여부" disabled={draft.normalDisplay !== "X"} value={draft.normalDisplay === "X" ? draft.posChecked : ""} values={["조회함", "조회불가"]} onChange={updatePosChecked} /></section>
     <section className="panel"><h2>④ 사진자료</h2><p className="photo-rule">업체사진: {photos.some((photo) => photo.type === "STORE_FRONT") ? "촬영완료" : "미촬영"}</p>{!draft.normalDisplay && <p className="notice">먼저 ② 실물 확인에서 정상진열 O/X를 선택하면 필요한 사진 입력칸이 표시됩니다.</p>}{photoMessage && <p className="ok upload-message">{photoMessage}</p>}{draft.normalDisplay === "O" && <><PhotoSlot id="photo-product-display" label="제품진열사진" description="가격정보와 진열상품이 동시노출 되도록 촬영" photo={itemPhotos.display} onFile={(file) => upload("PRODUCT_DISPLAY", file, "제품진열사진")} onDelete={onDeletePhoto} /><PhotoSlot id="photo-product-info" label="제품정보사진" description="상품후면 제품상세정보와 바코드 동시노출 되도록 촬영" photo={itemPhotos.info} onFile={(file) => upload("PRODUCT_INFO_BARCODE", file, "제품정보사진")} onDelete={onDeletePhoto} /></>}{draft.normalDisplay === "X" && <PhotoSlot id="photo-pos-receipt" label="POS/영수증사진" description="제품진열사진으로 가격정보 확인불가 시 POS기 또는 영수증 촬영" photo={itemPhotos.pos} onFile={(file) => upload("POS_RECEIPT", file, "POS/영수증사진")} onDelete={onDeletePhoto} />}{missing.length > 0 && <p className="warn">사진누락: {missing.join(", ")}</p>}</section>
-    <section className={`panel ${priceBlocked ? "disabled-block" : ""}`}><h2>⑤ 가격</h2><p className="price-base">기준가격: <strong>{draft.basePrice?.toLocaleString() ?? "-"}원</strong></p>{priceBlocked && <p className="small-help warn">바코드 미등록 미판매 상품은 가격 입력을 생략합니다.</p>}<Money label="정상가" disabled={priceBlocked} value={draft.normalPrice} onChange={(value) => update({ normalPrice: num(value) })} />{priceFeedback && <p className={`price-feedback ${priceFeedback.type}`}>{priceFeedback.text}</p>}<Choice label="할인 여부" disabled={priceBlocked} value={draft.hasDiscount === null ? "" : draft.hasDiscount ? "할인 있음" : "할인 없음"} values={["할인 없음", "할인 있음"]} onChange={(value) => update({ hasDiscount: value === "할인 있음" })} /><div className={draft.hasDiscount === false || priceBlocked ? "disabled-block" : ""}><Money label="할인가" value={draft.discountPrice} disabled={draft.hasDiscount === false || priceBlocked} onChange={(value) => update({ discountPrice: num(value) })} /><label>할인 시작일<input type="date" disabled={draft.hasDiscount === false || priceBlocked} value={draft.discountStartDate} onChange={(event) => update({ discountStartDate: event.target.value })} /></label><label>할인 종료일<input type="date" disabled={draft.hasDiscount === false || priceBlocked} value={draft.discountEndDate} onChange={(event) => update({ discountEndDate: event.target.value })} /></label><DiscountPeriod disabled={draft.hasDiscount === false || priceBlocked} value={draft.discountType} oral={draft.discountOral ?? draft.discountType.includes("구두")} onChange={(discountType, discountOral) => update({ discountType, discountOral })} /></div></section>
+    <section className={`panel price-panel ${priceBlocked ? "disabled-block" : ""}`}><h2>⑤ 가격</h2><p className="price-base">기준가격: <strong>{draft.basePrice?.toLocaleString() ?? "-"}원</strong></p>{priceBlocked && <p className="small-help warn">바코드 미등록 미판매 상품은 가격 입력을 생략합니다.</p>}<Money label="정상가" disabled={priceBlocked} value={draft.normalPrice} onChange={(value) => update({ normalPrice: num(value) })} />{priceFeedback && <div className={`price-feedback ${priceFeedback.type}`}>{priceFeedback.messages.map((message) => <span key={message}>{message}</span>)}</div>}<Choice label="할인 여부" disabled={priceBlocked} value={draft.hasDiscount === null ? "" : draft.hasDiscount ? "할인 있음" : "할인 없음"} values={["할인 없음", "할인 있음"]} onChange={(value) => update({ hasDiscount: value === "할인 있음" })} /><div className={draft.hasDiscount === false || priceBlocked ? "disabled-block" : ""}><Money label="할인가" value={draft.discountPrice} disabled={draft.hasDiscount === false || priceBlocked} onChange={(value) => update({ discountPrice: num(value) })} /><label>할인 시작일<input type="date" disabled={draft.hasDiscount === false || priceBlocked} value={draft.discountStartDate} onChange={(event) => update({ discountStartDate: event.target.value })} /></label><label>할인 종료일<input type="date" disabled={draft.hasDiscount === false || priceBlocked} value={draft.discountEndDate} onChange={(event) => update({ discountEndDate: event.target.value })} /></label><DiscountPeriod disabled={draft.hasDiscount === false || priceBlocked} value={draft.discountType} oral={draft.discountOral ?? draft.discountType.includes("구두")} onChange={(discountType, discountOral) => update({ discountType, discountOral })} /></div></section>
     <section className="panel"><h2>⑥ 특이사항</h2><div className={`abnormal-block ${draft.normalDisplay === "X" ? "disabled-block" : ""}`}><Choice label="비정상진열" disabled={draft.normalDisplay === "X"} value={draft.normalDisplay === "X" ? "" : draft.abnormalDisplay ?? ""} values={["O", "X"]} onChange={(value) => update({ abnormalDisplay: value as SurveyItem["abnormalDisplay"] })} />{draft.abnormalDisplay === "O" && draft.normalDisplay !== "X" && <p className="small-help warn">비정상진열이면 어떤 위치에 어떻게 진열되어 있었는지 아래 비고에 적어주세요.</p>}</div><div className="memo-block"><h3>비고</h3><p className="small-help">자주 쓰는 문구를 누르면 비고에 추가됩니다.</p><div className="chips memo-chips">{["폐점", "품절", "재고 소진", "재입고 예정", "1+1 행사", "임시휴업", "판매처 미협조"].map((text) => <button key={text} onClick={() => update({ memo: appendMemo(text) })}>{text}</button>)}</div><textarea placeholder="예: 판매처 미협조 / 재입고 예정 / 사진 촬영 불가" value={draft.memo} onChange={(event) => update({ memo: event.target.value })} /></div></section>
     {saveMessage && <div className={`save-toast ${saveMessage.includes("실패") ? "danger-toast" : ""}`}>{saveMessage}</div>}
     <div className="item-action-fab">
@@ -1161,7 +1179,6 @@ function PhotoSlot({ id, label, description, photo, onFile, onDelete }: { id: st
           <strong>{label}</strong>
           <small>{description}</small>
         </div>
-        <span>{photo ? "업로드됨" : "미업로드"}</span>
       </div>
       {photo && <PhotoPreview photo={photo} className="wide-preview" />}
       <div className="photo-actions">
@@ -1173,7 +1190,7 @@ function PhotoSlot({ id, label, description, photo, onFile, onDelete }: { id: st
 }
 
 function Info({ item }: { item: SurveyItem }) {
-  return <dl className="info"><dt>업체명</dt><dd>{item.companyName}</dd><dt>업체연락처</dt><dd>{item.companyTel}</dd><dt>마트명</dt><dd>{item.martName}</dd><dt>바코드</dt><dd>{item.barcode}</dd><dt>물품명</dt><dd>{item.productName}</dd><dt>규격</dt><dd>{item.spec}</dd><dt>기준가격</dt><dd>{item.basePrice?.toLocaleString() ?? "-"}</dd></dl>;
+  return <dl className="info"><dt>업체명</dt><dd>{item.companyName}</dd><dt>업체연락처</dt><dd>{item.companyTel}</dd><dt>마트명</dt><dd>{item.martName}</dd><dt>바코드</dt><dd>{item.barcode}</dd><dt>물품명</dt><dd>{item.productName}</dd><dt>규격</dt><dd>{item.spec}</dd><dt>기준가격</dt><dd>{item.basePrice !== null ? `${item.basePrice.toLocaleString()}원` : "-"}</dd></dl>;
 }
 
 function DiscountPeriod({ value, oral, disabled, onChange }: { value: string; oral: boolean; disabled?: boolean; onChange: (value: string, oral: boolean) => void }) {
@@ -1197,7 +1214,7 @@ function Choice({ label, value, values, disabled, onChange }: { label: string; v
 }
 
 function Money({ label, value, disabled, onChange }: { label: string; value: number | null; disabled?: boolean; onChange: (value: string) => void }) {
-  return <label>{label}<input inputMode="numeric" enterKeyHint="done" pattern="[0-9]*" disabled={disabled} value={typeof value === "number" && Number.isFinite(value) ? value : ""} onChange={(event) => onChange(event.target.value.replace(/\D/g, ""))} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} placeholder="원" /></label>;
+  return <label>{label}<input inputMode="numeric" enterKeyHint="done" pattern="[0-9,]*" disabled={disabled} value={typeof value === "number" && Number.isFinite(value) ? value.toLocaleString() : ""} onChange={(event) => onChange(event.target.value.replace(/\D/g, ""))} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} placeholder="원" /></label>;
 }
 
 function Validation({ title, items, open }: { title: string; items: SurveyItem[]; open: (id: string) => void }) {

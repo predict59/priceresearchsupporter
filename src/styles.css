@@ -194,9 +194,67 @@ textarea { min-height: 110px; resize: vertical; }
 }
 .sticky-search .search { margin: 0; }
 .search input::placeholder {
-  color: #b6c1ca;
-  font-size: 12px;
+  color: #c5ced7;
+  font-size: 11px;
   font-weight: 700;
+}
+.upload-page {
+  display: grid;
+  gap: 14px;
+}
+.upload-hero {
+  border: 1px solid #dbe1e5;
+  border-radius: 8px;
+  padding: 20px;
+  background: #fff;
+}
+.upload-hero span {
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: #ecfeff;
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 900;
+  margin-bottom: 10px;
+}
+.upload-hero h1 {
+  margin: 0 0 8px;
+}
+.upload-hero p {
+  margin: 0;
+  color: #52616b;
+  font-weight: 700;
+  line-height: 1.55;
+}
+.upload-panel {
+  display: grid;
+  gap: 10px;
+}
+.file-card {
+  margin: 0;
+  border: 1px solid #dbe1e5;
+  border-radius: 8px;
+  padding: 13px;
+  background: #f8fafc;
+  color: #17202a;
+}
+.file-card input {
+  margin-top: 4px;
+  background: #fff;
+}
+.file-card span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+.file-card.optional {
+  opacity: .88;
+}
+.analyze-button,
+.continue-button {
+  width: 100%;
 }
 .tool-toggle { min-height: 44px; white-space: nowrap; }
 .tool-panel {
@@ -422,8 +480,26 @@ textarea { min-height: 110px; resize: vertical; }
   color: #fff;
 }
 .map-ref { display: inline-flex; margin-bottom: 14px; color: #0f766e; font-weight: 800; }
-.contact { display: grid; gap: 4px; padding: 10px 0; border-top: 1px solid #eef2f4; }
-.contact a { color: #0f766e; display: inline-flex; gap: 5px; align-items: center; }
+.contact { display: grid; gap: 4px; padding: 12px 0; border-top: 1px solid #eef2f4; }
+.contact a { color: #0f766e; display: inline-flex; gap: 5px; align-items: center; font-weight: 900; }
+.contact-info {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 5px 10px;
+  margin: 0;
+}
+.contact-info dt {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 900;
+}
+.contact-info dd {
+  margin: 0;
+  color: #17202a;
+  font-size: 14px;
+  font-weight: 800;
+  word-break: break-word;
+}
 .item-contact {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -520,10 +596,6 @@ textarea { min-height: 110px; resize: vertical; }
   justify-content: space-between;
   gap: 10px;
 }
-.photo-slot span {
-  color: #52616b;
-  font-weight: 800;
-}
 .photo-title {
   display: grid;
   gap: 3px;
@@ -598,6 +670,23 @@ textarea { min-height: 110px; resize: vertical; }
   font-weight: 800;
   word-break: break-word;
 }
+.store-address {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0 18px;
+}
+.store-address span {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 900;
+}
+.store-address strong {
+  color: #17202a;
+  font-size: 15px;
+  line-height: 1.5;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
 .meta-label {
   color: #64748b;
   font-size: 13px;
@@ -628,6 +717,32 @@ textarea { min-height: 110px; resize: vertical; }
   margin: 0;
   color: #17202a;
   font-weight: 800;
+}
+.item-mini-info dd {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.eligibility-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+}
+.eligibility-badge.good {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #86efac;
+}
+.eligibility-badge.bad {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
 }
 .field-row { display: grid; grid-template-columns: 120px 1fr; gap: 10px; align-items: center; margin-bottom: 12px; }
 .field-row > span {
@@ -671,6 +786,22 @@ textarea { min-height: 110px; resize: vertical; }
   font-size: 13px;
   font-weight: 900;
   line-height: 1.35;
+  display: grid;
+  gap: 3px;
+}
+.price-panel > label,
+.price-panel .field-row {
+  margin-bottom: 14px;
+}
+.price-panel > label {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 900;
+}
+.price-panel input {
+  color: #17202a;
+  font-size: 16px;
+  font-weight: 800;
 }
 .price-feedback.warn {
   background: #fff7ed;
@@ -1051,6 +1182,7 @@ textarea { min-height: 110px; resize: vertical; }
   .item-contact a { justify-content: center; }
   .photo-actions { grid-template-columns: 1fr; }
   .photo-picker > div { grid-template-columns: 1fr 1fr; }
+  .price-feedback { margin-left: 0; }
   .save-fab { right: 12px; bottom: 14px; }
   .save-toast { right: 12px; bottom: 78px; }
   .item-action-fab { left: 12px; right: 12px; grid-template-columns: 1fr 1.2fr 1fr; }
