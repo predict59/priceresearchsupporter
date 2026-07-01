@@ -825,11 +825,10 @@ textarea { min-height: 110px; resize: vertical; }
 .photo-actions .photo-button { margin: 0; min-height: 46px; }
 .upload-message { margin: 0 0 10px; }
 .item-hero {
-  position: sticky;
-  top: var(--topbar-height);
-  z-index: 19;
+  position: relative;
+  z-index: 1;
   background: #f6f7f8;
-  padding: 8px 0;
+  padding: 0 0 8px;
   width: 100%;
   max-width: 100%;
   overflow: hidden;

@@ -202,35 +202,48 @@ function App() {
   const currentRegion = settings.currentRegion;
   const regionItems = useMemo(() => items.filter((item) => item.region === currentRegion), [items, currentRegion]);
   const regionStores = useMemo(() => stores.filter((store) => store.region === currentRegion), [stores, currentRegion]);
+  const photosByStore = useMemo(() => {
+    const map = new Map<string, SurveyPhoto[]>();
+    photos.forEach((photo) => map.set(photo.storeId, [...(map.get(photo.storeId) ?? []), photo]));
+    return map;
+  }, [photos]);
+  const regionItemsByStore = useMemo(() => {
+    const map = new Map<string, SurveyItem[]>();
+    regionItems.forEach((item) => map.set(item.storeId, [...(map.get(item.storeId) ?? []), item]));
+    return map;
+  }, [regionItems]);
+  const regionStatsByStore = useMemo(() => {
+    const map = new Map<string, RegionStats>();
+    regionStores.forEach((store) => map.set(store.id, summarize(regionItemsByStore.get(store.id) ?? [], photosByStore.get(store.id) ?? [])));
+    return map;
+  }, [regionStores, regionItemsByStore, photosByStore]);
   const storeVisitCompare = (a: SurveyStore, b: SurveyStore) =>
     (a.visitOrder ?? 999999) - (b.visitOrder ?? 999999) || `${a.storeAddress} ${a.storeName}`.localeCompare(`${b.storeAddress} ${b.storeName}`, "ko");
   const sortedRegionStores = useMemo(() => {
-    const statsOf = (storeId: string) => summarize(regionItems.filter((item) => item.storeId === storeId), photos.filter((photo) => photo.storeId === storeId));
     return [...regionStores].sort((a, b) => {
-      const as = statsOf(a.id);
-      const bs = statsOf(b.id);
+      const as = regionStatsByStore.get(a.id) ?? emptyStats;
+      const bs = regionStatsByStore.get(b.id) ?? emptyStats;
       if (storeSort === "임의 지정 순") return storeVisitCompare(a, b);
       if (storeSort === "품목 많은 순") return bs.total - as.total;
       if (storeSort === "사진누락 많은 순") return bs.photoMissing - as.photoMissing;
       if (storeSort === "주소순") return `${a.storeAddress} ${a.storeName}`.localeCompare(`${b.storeAddress} ${b.storeName}`, "ko");
       return (bs.notStarted + bs.inProgress) - (as.notStarted + as.inProgress);
     });
-  }, [regionStores, regionItems, photos, storeSort]);
+  }, [regionStores, regionStatsByStore, storeSort]);
   const visibleRegionStores = useMemo(() => sortedRegionStores.filter((store) => {
-    const ownItems = regionItems.filter((item) => item.storeId === store.id);
+    const ownItems = regionItemsByStore.get(store.id) ?? [];
     const searchText = [
       store.storeName,
       store.storeAddress,
       ...ownItems.flatMap((item) => [item.itemNo, item.productName, item.barcode, item.companyName, item.companyManager, item.companyTel, item.martTel]),
     ].join(" ");
     if (!searchText.includes(storeQuery)) return false;
-    const ownPhotos = photos.filter((photo) => photo.storeId === store.id);
-    const ownStats = summarize(ownItems, ownPhotos);
+    const ownStats = regionStatsByStore.get(store.id) ?? emptyStats;
     if (filter === "미완료" && ownStats.completed >= ownStats.total) return false;
     if (filter !== "전체" && filter !== "미완료" && filter !== "사진누락" && !ownItems.some((item) => item.status === filter)) return false;
     if (filter === "사진누락" && ownStats.photoMissing === 0) return false;
     return true;
-  }), [sortedRegionStores, storeQuery, regionItems, photos, filter]);
+  }), [sortedRegionStores, storeQuery, regionItemsByStore, regionStatsByStore, filter]);
   const selectedStore = stores.find((store) => store.id === selectedStoreId);
   const storeItems = useMemo(() => items.filter((item) => item.storeId === selectedStoreId), [items, selectedStoreId]);
   const selectedItem = items.find((item) => item.id === selectedItemId);
@@ -781,9 +794,8 @@ function App() {
           )}
           <div className="list">
             {visibleRegionStores.map((store) => {
-              const ownItems = regionItems.filter((item) => item.storeId === store.id);
-              const ownPhotos = photos.filter((photo) => photo.storeId === store.id);
-              const ownStats = summarize(ownItems, ownPhotos);
+              const ownItems = regionItemsByStore.get(store.id) ?? [];
+              const ownStats = regionStatsByStore.get(store.id) ?? emptyStats;
               return (
                 <StoreCard
                   key={store.id}
@@ -815,7 +827,7 @@ function App() {
             <h1>{selectedStore.storeName}</h1>
             <div className="store-operating">
               <span>현재상태</span>
-              <strong className={`operating-badge ${operatingClass(selectedStore.operatingStatus)}`}>{selectedStore.operatingStatus ?? "영업 중"}</strong>
+              <strong className={`operating-badge ${selectedStore.frontPhotoId ? operatingClass(selectedStore.operatingStatus) : "unknown"}`}>{storeDisplayStatus(selectedStore)}</strong>
             </div>
             <div className="store-state-actions">
               <button type="button" className="danger-light" onClick={() => applyStoreOperatingStatus("폐업")}>폐업 처리</button>
@@ -1096,6 +1108,11 @@ function operatingClass(status?: StoreOperatingStatus) {
   return `operating-${(status ?? "영업 중").replace(/\s/g, "")}`;
 }
 
+function storeDisplayStatus(store: SurveyStore) {
+  if (store.operatingStatus === "폐업" || store.operatingStatus === "임시휴업") return store.operatingStatus;
+  return store.frontPhotoId ? "영업 중" : "미확인";
+}
+
 function StoreCard({
   store,
   stats,
@@ -1133,7 +1150,7 @@ function StoreCard({
   const latestSurveyDate = completed.map((item) => item.surveyDate).filter(Boolean).sort().at(-1) ?? "-";
   const percent = stats.total ? Math.round((stats.completed / stats.total) * 100) : 0;
   const completedStore = stats.total > 0 && stats.completed === stats.total;
-  const displayOperatingStatus = store.frontPhotoId ? (store.operatingStatus ?? "영업 중") : "미확인";
+  const displayOperatingStatus = storeDisplayStatus(store);
   if (orderEditing) {
     return (
       <article id={`store-card-${store.id}`} className={`visit-order-row ${focused ? "focused" : ""} ${dragging ? "dragging" : ""}`} draggable onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}>
@@ -1155,7 +1172,7 @@ function StoreCard({
     <article id={`store-card-${store.id}`} className={`card store-card ${focused ? "focused" : ""} ${completedStore ? "completed" : ""}`}>
       <div className="card-head">
         <div>
-          <h2 className="store-card-title" title={store.storeName}><span className="store-name-text">{store.storeName}</span><span className={`operating-badge small ${store.frontPhotoId ? operatingClass(store.operatingStatus) : "unknown"}`}>{displayOperatingStatus}</span></h2>
+          <h2 className="store-card-title" title={store.storeName}><span className="store-name-text">{store.storeName}</span><span className={`operating-badge small ${displayOperatingStatus === "미확인" ? "unknown" : operatingClass(displayOperatingStatus as StoreOperatingStatus)}`}>{displayOperatingStatus}</span></h2>
           <p>{store.storeAddress || "주소 없음"}</p>
         </div>
         <details className="card-menu">
@@ -1192,8 +1209,7 @@ function ContactModal({ store, items, onClose }: { store?: SurveyStore; items: S
       <section className="modal">
         <div className="modal-head">
           <div>
-            <h2>{store.storeName}</h2>
-            <p>{store.storeAddress || "주소 없음"}</p>
+            <h2>담당자 리스트</h2>
           </div>
           <button className="icon-button" onClick={onClose} aria-label="닫기"><X size={18} /></button>
         </div>
@@ -1230,7 +1246,6 @@ function Contacts({ items }: { items: SurveyItem[] }) {
   const contacts = Array.from(new Map(items.map((item) => [`${item.companyName}|${item.companyManager}|${item.companyTel}|${item.martTel}`, item])).values());
   return (
     <section className="panel">
-      <h2>담당자 연락처</h2>
       {contacts.length === 0 && <p className="warn">확인 필요: 연락처 정보가 없습니다.</p>}
       {contacts.map((item) => {
         const count = items.filter((candidate) => candidate.companyName === item.companyName && candidate.companyManager === item.companyManager && candidate.companyTel === item.companyTel && candidate.martTel === item.martTel).length;
@@ -1292,7 +1307,7 @@ function ItemEditor({ item, storeItems, photos, onPhoto, onDeletePhoto, onSave, 
     return () => window.clearTimeout(timer);
   }, [saveMessage]);
   const update = (patch: Partial<SurveyItem>) => setDraft((old) => ({ ...old, ...patch, status: old.status === "미조사" ? "조사중" : old.status }));
-  const missing = requiredPhotoLabels(draft, photos);
+  const missing = draft.normalDisplay ? requiredPhotoLabels(draft, photos) : [];
   const itemPhotos = {
     display: photos.find((photo) => photo.itemId === draft.id && photo.type === "PRODUCT_DISPLAY"),
     info: photos.find((photo) => photo.itemId === draft.id && photo.type === "PRODUCT_INFO_BARCODE"),
