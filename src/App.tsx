@@ -670,7 +670,7 @@ function App() {
       <header ref={topbarRef} className={`topbar ${menuOpen ? "menu-open" : ""}`}>
         <div className="top-main">
           <button className="top-back icon-button" onClick={goBack} disabled={!canGoBack} aria-label="뒤로가기">←</button>
-          <button className="brand" onClick={() => { setStoreQuery(""); setItemQuery(""); setView(regions.length ? "regions" : "upload"); }}>{screenTitle}</button>
+          <div className="brand" aria-current="page">{screenTitle}</div>
           <span className="current" aria-hidden="true" />
           <button className="top-toggle icon-button" onClick={() => setMenuOpen((value) => !value)} aria-expanded={menuOpen} aria-label="메뉴 열기">
             <Menu size={20} />
