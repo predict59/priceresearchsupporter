@@ -16,6 +16,12 @@ function districtFromAddress(address: string) {
   return match?.[1] ?? "";
 }
 
+function priceJudgmentOf(item: SurveyItem) {
+  if (item.basePrice === null || item.normalPrice === null) return "";
+  if (item.normalPrice === item.basePrice) return "동일";
+  return item.normalPrice > item.basePrice ? "고가" : "저가";
+}
+
 export async function exportRegionExcel(region: string, items: SurveyItem[]) {
   const group = [
     "기준 정보",
@@ -29,6 +35,7 @@ export async function exportRegionExcel(region: string, items: SurveyItem[]) {
     "실물 확인가능",
     "실물 확인가능",
     "실물 확인가능",
+    "가격 판단",
     "가격 판단",
     "가격 판단",
     "가격 판단",
@@ -63,6 +70,7 @@ export async function exportRegionExcel(region: string, items: SurveyItem[]) {
     "시작",
     "종료",
     "기간구분",
+    "가격 판단",
     "바코드등록여부",
     "미판매",
     "미진열",
@@ -92,6 +100,7 @@ export async function exportRegionExcel(region: string, items: SurveyItem[]) {
     item.discountStartDate,
     item.discountEndDate,
     `${item.discountType.replace("구두", "") === "①" ? "1" : item.discountType.replace("구두", "") === "②" ? "2" : item.discountType.replace("구두", "")}${item.discountOral || item.discountType.includes("구두") ? "구두확인" : ""}`,
+    priceJudgmentOf(item),
     item.barcodeRegistered,
     item.abnormalStatus === "미판매" ? "O" : item.abnormalStatus ? "-" : "",
     item.abnormalStatus === "미진열" ? "O" : item.abnormalStatus ? "-" : "",
@@ -108,10 +117,10 @@ export async function exportRegionExcel(region: string, items: SurveyItem[]) {
   ws["!merges"] = [
     { s: { r: 0, c: 0 }, e: { r: 0, c: 7 } },
     { s: { r: 0, c: 8 }, e: { r: 0, c: 10 } },
-    { s: { r: 0, c: 11 }, e: { r: 0, c: 15 } },
-    { s: { r: 0, c: 16 }, e: { r: 0, c: 19 } },
-    { s: { r: 0, c: 22 }, e: { r: 0, c: 24 } },
-    { s: { r: 0, c: 25 }, e: { r: 0, c: 26 } },
+    { s: { r: 0, c: 11 }, e: { r: 0, c: 16 } },
+    { s: { r: 0, c: 17 }, e: { r: 0, c: 20 } },
+    { s: { r: 0, c: 23 }, e: { r: 0, c: 25 } },
+    { s: { r: 0, c: 26 }, e: { r: 0, c: 27 } },
   ];
   ws["!cols"] = headers.map((header) => ({ wch: Math.max(10, header.length + 4) }));
   const wb = XLSX.utils.book_new();

@@ -150,6 +150,7 @@ async function resizePhoto(file: File) {
 
 function App() {
   const [view, setView] = useState<View>("upload");
+  const topbarRef = useRef<HTMLElement | null>(null);
   const [isBooting, setIsBooting] = useState(true);
   const [settings, setSettingsState] = useState<AppSettings>({ defaultSurveyDate: today() });
   const [regions, setRegions] = useState<Region[]>([]);
@@ -267,6 +268,16 @@ function App() {
       setDragStoreId("");
     }
   }, [storeSort]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const closeOnOutside = (event: PointerEvent) => {
+      if (topbarRef.current?.contains(event.target as Node)) return;
+      setMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutside);
+    return () => document.removeEventListener("pointerdown", closeOnOutside);
+  }, [menuOpen]);
 
   useEffect(() => {
     if (view !== "workspace" || !selectedStoreId) return;
@@ -605,10 +616,26 @@ function App() {
     : view === "backup" ? "백업/복원"
     : "자료 업로드";
   const menuRegionStats = currentRegion ? regionSummary(currentRegion) : emptyStats;
-  const menuItemStats = view === "items" && selectedStore
+  const menuAllRegionStats = (() => {
+    const summaries = regions.map((region) => regionSummary(region.name));
+    const completed = summaries.filter((summary) => summary.total > 0 && summary.completed === summary.total).length;
+    const inProgress = summaries.filter((summary) => summary.completed > 0 && summary.completed < summary.total).length;
+    return {
+      total: regions.length,
+      completed,
+      inProgress,
+      notStarted: Math.max(0, regions.length - completed - inProgress),
+      photoMissing: summaries.reduce((sum, summary) => sum + summary.photoMissing, 0),
+    };
+  })();
+  const menuItemStats = (view === "store" || view === "items" || view === "item") && selectedStore
     ? summarize(storeItems, photos.filter((photo) => photo.storeId === selectedStore.id))
     : currentRegion ? summarize(regionItems, photos) : emptyStats;
   const menuContext = selectedStore?.storeName ?? selectedItem?.storeName;
+  const menuProgressPercent =
+    view === "regions"
+      ? (menuAllRegionStats.total ? Math.round((menuAllRegionStats.completed / menuAllRegionStats.total) * 100) : 0)
+      : (menuItemStats.total ? Math.round((menuItemStats.completed / menuItemStats.total) * 100) : 0);
 
   if (isBooting) {
     return (
@@ -624,7 +651,7 @@ function App() {
 
   return (
     <div className="app">
-      <header className={`topbar ${menuOpen ? "menu-open" : ""}`}>
+      <header ref={topbarRef} className={`topbar ${menuOpen ? "menu-open" : ""}`}>
         <div className="top-main">
           <button className="top-back icon-button" onClick={goBack} disabled={!canGoBack} aria-label="뒤로가기">←</button>
           <button className="brand" onClick={() => { setStoreQuery(""); setItemQuery(""); setView(regions.length ? "regions" : "upload"); }}>{screenTitle}</button>
@@ -637,8 +664,11 @@ function App() {
           <div className="menu-status">
             <span>지역 <strong>{currentRegion || "-"}</strong></span>
             {menuContext && <span>마트 <strong>{menuContext}</strong></span>}
-            <div className="menu-progress"><i style={{ width: `${menuItemStats.total ? Math.round((menuItemStats.completed / menuItemStats.total) * 100) : 0}%` }} /></div>
-            <small>품목 {menuItemStats.completed.toLocaleString()} / {menuItemStats.total.toLocaleString()} · 마트 {menuRegionStats.completed.toLocaleString()} / {menuRegionStats.total.toLocaleString()}</small>
+            <div className="menu-progress"><i style={{ width: `${menuProgressPercent}%` }} /></div>
+            {view === "regions" && <small>지역 {menuAllRegionStats.completed.toLocaleString()} / {menuAllRegionStats.total.toLocaleString()}</small>}
+            {view === "workspace" && <small>마트 {menuRegionStats.completed.toLocaleString()} / {menuRegionStats.total.toLocaleString()} · 품목 {menuItemStats.completed.toLocaleString()} / {menuItemStats.total.toLocaleString()}</small>}
+            {(view === "store" || view === "items" || view === "item") && <small>품목 {menuItemStats.completed.toLocaleString()} / {menuItemStats.total.toLocaleString()}</small>}
+            {(view === "upload" || view === "backup" || view === "validation") && <small>품목 {menuItemStats.completed.toLocaleString()} / {menuItemStats.total.toLocaleString()} · 마트 {menuRegionStats.completed.toLocaleString()} / {menuRegionStats.total.toLocaleString()}</small>}
           </div>
           <button onClick={() => { setStoreQuery(""); setItemQuery(""); setView("regions"); setMenuOpen(false); }}>HOME</button>
           <button disabled={!currentRegion} onClick={() => { setView("validation"); setMenuOpen(false); }}>검증</button>
