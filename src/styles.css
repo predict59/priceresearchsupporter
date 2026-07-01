@@ -47,6 +47,10 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   top: 0;
   left: 0;
   right: 0;
+  width: 100%;
+  max-width: 100dvw;
+  overflow-x: hidden;
+  box-sizing: border-box;
   z-index: 30;
   background: #fff;
   border-bottom: 1px solid #dbe1e5;
@@ -826,7 +830,7 @@ textarea { min-height: 110px; resize: vertical; }
   top: var(--topbar-height);
   z-index: 19;
   background: #f6f7f8;
-  padding: 12px 0;
+  padding: 8px 0;
   width: 100%;
   max-width: 100%;
   overflow: hidden;
@@ -839,17 +843,17 @@ textarea { min-height: 110px; resize: vertical; }
 }
 .compact-hero > div {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
+  grid-template-columns: minmax(0, max-content) minmax(0, 1fr) auto;
+  gap: 8px;
   align-items: center;
   min-width: 0;
 }
 .compact-hero h1 {
+  display: contents;
   font-size: 18px;
   margin: 0 0 6px;
   min-width: 0;
   max-width: 100%;
-  flex-wrap: nowrap;
 }
 .compact-hero .item-title > span:last-child {
   min-width: 0;
@@ -1591,6 +1595,7 @@ textarea { min-height: 110px; resize: vertical; }
 
 @media (max-width: 720px) {
   :root { --topbar-height: 51px; }
+  .topbar { width: 100dvw; max-width: 100dvw; }
   .top-main { grid-template-columns: 38px minmax(0, 1fr) 38px; gap: 6px; }
   .brand { font-size: 16px; }
   .current { display: none; }
@@ -1636,13 +1641,16 @@ textarea { min-height: 110px; resize: vertical; }
   .save-fab { right: 12px; bottom: 14px; }
   .save-toast { right: 12px; bottom: 78px; }
   .date-range {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 6px;
+    grid-template-columns: minmax(0, 1fr) 16px minmax(0, 1fr);
+    gap: 5px;
+    align-items: center;
   }
   .date-range input {
     width: 100%;
     min-width: 0;
-    font-size: 16px;
+    min-height: 40px;
+    padding: 7px 6px;
+    font-size: 13px;
   }
   .date-range b {
     text-align: center;

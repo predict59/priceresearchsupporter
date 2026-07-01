@@ -629,8 +629,8 @@ function App() {
     : view === "validation" ? "검증"
     : view === "backup" ? "백업/복원"
     : "자료 업로드";
-  const menuRegionStats = currentRegion ? regionSummary(currentRegion) : emptyStats;
-  const menuAllRegionStats = (() => {
+  const menuRegionStats = useMemo(() => currentRegion ? regionSummary(currentRegion) : emptyStats, [currentRegion, stores, items, photos]);
+  const menuAllRegionStats = useMemo(() => {
     const summaries = regions.map((region) => regionSummary(region.name));
     const completed = summaries.filter((summary) => summary.total > 0 && summary.completed === summary.total).length;
     const inProgress = summaries.filter((summary) => summary.completed > 0 && summary.completed < summary.total).length;
@@ -641,10 +641,10 @@ function App() {
       notStarted: Math.max(0, regions.length - completed - inProgress),
       photoMissing: summaries.reduce((sum, summary) => sum + summary.photoMissing, 0),
     };
-  })();
-  const menuItemStats = (view === "store" || view === "items" || view === "item") && selectedStore
+  }, [regions, stores, items, photos, currentRegion]);
+  const menuItemStats = useMemo(() => (view === "store" || view === "items" || view === "item") && selectedStore
     ? summarize(storeItems, photos.filter((photo) => photo.storeId === selectedStore.id))
-    : currentRegion ? summarize(regionItems, photos) : emptyStats;
+    : currentRegion ? summarize(regionItems, photos) : emptyStats, [view, selectedStore, storeItems, regionItems, photos, currentRegion]);
   const menuContext = view === "store" || view === "items" || view === "item"
     ? (selectedStore?.storeName ?? selectedItem?.storeName)
     : "";
