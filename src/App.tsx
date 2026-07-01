@@ -360,7 +360,8 @@ function App() {
   }
 
   async function chooseRegion(region: string) {
-    await updateSettings({ currentRegion: region });
+    const nextSettings = { ...settings, currentRegion: region };
+    setSettingsState(nextSettings);
     setSelectedStoreId("");
     setSelectedItemId("");
     setStoreQuery("");
@@ -368,20 +369,24 @@ function App() {
     setFilter("전체");
     setOrderEditing(false);
     setDragStoreId("");
-    await refresh(region);
+    setPhotos([]);
     setView("workspace");
+    saveSettings(nextSettings).then(() => refresh(region));
   }
 
   async function openStore(store: SurveyStore) {
     const todayValue = today();
     if (store.surveyDate !== todayValue) {
-      await putStore({ ...store, surveyDate: todayValue, updatedAt: now() });
+      const nextStore = { ...store, surveyDate: todayValue, updatedAt: now() };
+      setStores((old) => old.map((candidate) => candidate.id === store.id ? nextStore : candidate));
+      putStore(nextStore).then(() => refresh(store.region));
     }
     setSelectedStoreId(store.id);
     setItemQuery("");
-    await updateSettings({ lastOpenedStoreId: store.id, currentRegion: store.region });
-    await refresh(store.region);
+    const nextSettings = { ...settings, lastOpenedStoreId: store.id, currentRegion: store.region };
+    setSettingsState(nextSettings);
     setView("store");
+    saveSettings(nextSettings);
   }
 
   async function saveVisitOrder(store: SurveyStore, value: string) {
@@ -643,21 +648,19 @@ function App() {
     : view === "backup" ? "백업/복원"
     : "자료 업로드";
   const menuAllRegionStats = useMemo(() => {
-    const summaries = regions.map((region) => regionSummary(region.name));
-    const completed = summaries.filter((summary) => summary.total > 0 && summary.completed === summary.total).length;
-    const inProgress = summaries.filter((summary) => summary.completed > 0 && summary.completed < summary.total).length;
+    if (!summaryOpen || view !== "regions") return emptyStats;
+    const completed = regions.filter((region) => {
+      const ownItems = items.filter((item) => item.region === region.name);
+      return ownItems.length > 0 && ownItems.every((item) => item.status === "완료");
+    }).length;
     return {
       total: regions.length,
       completed,
-      inProgress,
-      notStarted: Math.max(0, regions.length - completed - inProgress),
-      photoMissing: summaries.reduce((sum, summary) => sum + summary.photoMissing, 0),
+      inProgress: 0,
+      notStarted: Math.max(0, regions.length - completed),
+      photoMissing: 0,
     };
-  }, [regions, stores, items, photos, currentRegion]);
-  const menuContext = view === "store" || view === "items" || view === "item"
-    ? (selectedStore?.storeName ?? selectedItem?.storeName)
-    : "";
-
+  }, [summaryOpen, view, regions, items]);
   if (isBooting) {
     return (
       <div className="app">
@@ -682,17 +685,11 @@ function App() {
           </button>
         </div>
         <div className="top-actions">
-          <div className="menu-status">
-            {view === "regions"
-              ? <span>화면 <strong>메인</strong></span>
-              : <span>지역 <strong>{currentRegion || "-"}</strong></span>}
-            {menuContext && <span>마트 <strong>{menuContext}</strong></span>}
-          </div>
-          <button onClick={() => { setSummaryOpen(true); setMenuOpen(false); }}>진행률 확인</button>
           <button onClick={() => { setStoreQuery(""); setItemQuery(""); setView("regions"); setMenuOpen(false); }}>HOME</button>
+          <button onClick={() => { setSummaryOpen(true); setMenuOpen(false); }}>진행률 확인</button>
           <button disabled={!currentRegion} onClick={() => { setView("validation"); setMenuOpen(false); }}>검증</button>
-          <button onClick={() => { setView("backup"); setMenuOpen(false); }}>백업/복원</button>
           <button onClick={openStorageInfo}>자체저장공간</button>
+          <button onClick={() => { setView("backup"); setMenuOpen(false); }}>백업/복원</button>
         </div>
       </header>
 
@@ -950,6 +947,7 @@ function App() {
           stats={menuAllRegionStats}
           storeCount={regions.length}
           completedStoreCount={menuAllRegionStats.completed}
+          mode="regions"
           onClose={() => setSummaryOpen(false)}
         />
       )}
@@ -958,16 +956,21 @@ function App() {
           region={currentRegion}
           stats={stats}
           storeCount={regionStores.length}
-          completedStoreCount={regionStores.filter((store) => regionItems.filter((item) => item.storeId === store.id).every((item) => item.status === "완료")).length}
+          completedStoreCount={regionStores.filter((store) => {
+            const ownStats = regionStatsByStore.get(store.id) ?? emptyStats;
+            return ownStats.total > 0 && ownStats.completed === ownStats.total;
+          }).length}
+          mode="workspace"
           onClose={() => setSummaryOpen(false)}
         />
       )}
       {summaryOpen && view === "items" && selectedStore && (
         <SummaryModal
           region={selectedStore.storeName}
-          stats={summarize(storeItems, photos.filter((photo) => photo.storeId === selectedStore.id))}
+          stats={summarize(storeItems, photosByStore.get(selectedStore.id) ?? [])}
           storeCount={1}
           completedStoreCount={storeItems.every((item) => item.status === "완료") ? 1 : 0}
+          mode="items"
           onClose={() => setSummaryOpen(false)}
         />
       )}
@@ -1219,24 +1222,33 @@ function ContactModal({ store, items, onClose }: { store?: SurveyStore; items: S
   );
 }
 
-function SummaryModal({ region, stats, storeCount, completedStoreCount, onClose }: { region?: string; stats: RegionStats; storeCount: number; completedStoreCount: number; onClose: () => void }) {
+function SummaryModal({ region, stats, storeCount, completedStoreCount, mode, onClose }: { region?: string; stats: RegionStats; storeCount: number; completedStoreCount: number; mode: "regions" | "workspace" | "items"; onClose: () => void }) {
+  const regionPercent = storeCount ? Math.round((completedStoreCount / storeCount) * 100) : 0;
+  const itemPercent = stats.total ? Math.round((stats.completed / stats.total) * 100) : 0;
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true">
       <section className="modal">
         <div className="modal-head">
           <div>
             <h2>{region ?? "현재 지역"} 현황</h2>
-            <p>마트와 품목 기준 진행률입니다.</p>
+            <p>{mode === "regions" ? "지역 기준 완료 현황입니다." : mode === "workspace" ? "마트와 물품 기준 진행률입니다." : "물품 기준 진행률입니다."}</p>
           </div>
           <button className="icon-button" onClick={onClose} aria-label="닫기"><X size={18} /></button>
         </div>
-        <Stats stats={stats} />
-        <div className="summary-grid">
-          <div><strong>{storeCount.toLocaleString()}</strong><span>방문지</span></div>
-          <div><strong>{completedStoreCount.toLocaleString()}</strong><span>완료 마트</span></div>
-          <div><strong>{stats.completed.toLocaleString()}</strong><span>완료 품목</span></div>
-          <div><strong>{(stats.total - stats.completed).toLocaleString()}</strong><span>남은 품목</span></div>
-        </div>
+        {(mode === "regions" || mode === "workspace") && (
+          <div className="summary-progress-card">
+            <div><span>{mode === "regions" ? "지역" : "마트"}</span><strong>{completedStoreCount.toLocaleString()}<small>/{storeCount.toLocaleString()}</small></strong></div>
+            <div className="progress-line"><span style={{ width: `${regionPercent}%` }} /></div>
+            <em>미완료 {(storeCount - completedStoreCount).toLocaleString()}</em>
+          </div>
+        )}
+        {(mode === "workspace" || mode === "items") && (
+          <div className="summary-progress-card">
+            <div><span>물품</span><strong>{stats.completed.toLocaleString()}<small>/{stats.total.toLocaleString()}</small></strong></div>
+            <div className="progress-line"><span style={{ width: `${itemPercent}%` }} /></div>
+            <em>미완료 {(stats.total - stats.completed).toLocaleString()}</em>
+          </div>
+        )}
       </section>
     </div>
   );

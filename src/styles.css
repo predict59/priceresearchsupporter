@@ -535,6 +535,41 @@ textarea { min-height: 110px; resize: vertical; }
   color: #52616b;
   font-weight: 700;
 }
+.summary-progress-card {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #e3e9ed;
+  border-radius: 8px;
+  padding: 12px;
+  background: #f8fafc;
+  margin-bottom: 10px;
+}
+.summary-progress-card > div:first-child {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.summary-progress-card span {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 900;
+}
+.summary-progress-card strong {
+  color: #17202a;
+  font-size: 24px;
+  line-height: 1;
+}
+.summary-progress-card small {
+  color: #64748b;
+  font-size: 14px;
+}
+.summary-progress-card em {
+  color: #64748b;
+  font-style: normal;
+  font-size: 13px;
+  font-weight: 800;
+}
 .confirm-dialog {
   width: min(430px, calc(100vw - 28px));
   text-align: left;
