@@ -176,7 +176,12 @@ function App() {
   const [storageOpen, setStorageOpen] = useState(false);
   const [storageEstimate, setStorageEstimate] = useState<StorageEstimate | undefined>();
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
+  const [exitMessage, setExitMessage] = useState("");
   const confirmResolver = useRef<((value: boolean) => void) | null>(null);
+  const canGoBackRef = useRef(false);
+  const goBackRef = useRef<() => void>(() => undefined);
+  const exitArmedUntilRef = useRef(0);
+  const allowBrowserBackRef = useRef(false);
 
   const currentRegion = settings.currentRegion;
   const regionItems = useMemo(() => items.filter((item) => item.region === currentRegion), [items, currentRegion]);
@@ -534,6 +539,35 @@ function App() {
       setView("upload");
     }
   };
+  useEffect(() => {
+    canGoBackRef.current = canGoBack;
+    goBackRef.current = goBack;
+  }, [canGoBack, view, currentRegion, regions.length]);
+
+  useEffect(() => {
+    history.replaceState({ appRoot: true }, "", location.href);
+    history.pushState({ appGuard: true }, "", location.href);
+    const onPopState = () => {
+      if (allowBrowserBackRef.current) return;
+      if (canGoBackRef.current) {
+        goBackRef.current();
+        history.pushState({ appGuard: true }, "", location.href);
+        return;
+      }
+      const nowMs = Date.now();
+      if (exitArmedUntilRef.current > nowMs) {
+        allowBrowserBackRef.current = true;
+        history.back();
+        return;
+      }
+      exitArmedUntilRef.current = nowMs + 2200;
+      setExitMessage("한 번 더 뒤로가기를 누르면 종료됩니다.");
+      window.setTimeout(() => setExitMessage(""), 2200);
+      history.pushState({ appGuard: true }, "", location.href);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
   const screenTitle =
     view === "regions" ? "지역리스트"
     : view === "workspace" ? "업체리스트"
@@ -844,6 +878,7 @@ function App() {
           onClose={() => setSummaryOpen(false)}
         />
       )}
+      {exitMessage && <div className="app-exit-toast">{exitMessage}</div>}
     </div>
   );
 }
@@ -1037,7 +1072,7 @@ function StoreCard({
     <article id={`store-card-${store.id}`} className={`card store-card ${focused ? "focused" : ""}`}>
       <div className="card-head">
         <div>
-          <h2>{store.storeName} <span className={`operating-badge small ${operatingClass(store.operatingStatus)}`}>{store.operatingStatus ?? "영업 중"}</span></h2>
+          <h2 className="store-card-title" title={store.storeName}><span className="store-name-text">{store.storeName}</span><span className={`operating-badge small ${operatingClass(store.operatingStatus)}`}>{store.operatingStatus ?? "영업 중"}</span></h2>
           <p>{store.storeAddress || "주소 없음"}</p>
         </div>
         <details className="card-menu">
