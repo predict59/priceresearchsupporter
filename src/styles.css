@@ -816,14 +816,17 @@ textarea { min-height: 110px; resize: vertical; }
 .upload-message { margin: 0 0 10px; }
 .item-hero {
   position: sticky;
-  top: 64px;
-  z-index: 6;
+  top: var(--topbar-height);
+  z-index: 19;
   background: #f6f7f8;
   padding: 12px 0;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
 }
 .compact-hero {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   align-items: center;
 }
@@ -831,11 +834,21 @@ textarea { min-height: 110px; resize: vertical; }
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
-  align-items: start;
+  align-items: center;
+  min-width: 0;
 }
 .compact-hero h1 {
   font-size: 18px;
   margin: 0 0 6px;
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: nowrap;
+}
+.compact-hero .item-title > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .info {
   display: grid;
@@ -1265,6 +1278,7 @@ textarea { min-height: 110px; resize: vertical; }
   gap: 7px;
   padding: 7px;
   padding-top: 12px;
+  box-sizing: border-box;
   border: 1px solid #dbe1e5;
   border-radius: 18px;
   background: rgba(255, 255, 255, .96);
@@ -1634,14 +1648,17 @@ textarea { min-height: 110px; resize: vertical; }
   }
   .item-action-fab {
     left: 10px;
-    right: 10px;
-    width: auto;
-    max-width: none;
+    right: auto;
+    width: calc(100dvw - 20px);
+    max-width: calc(100dvw - 20px);
     transform: none;
     grid-template-columns: 1fr 1.2fr 1fr;
+    border-radius: 16px;
+    gap: 6px;
   }
   .item-action-fab button {
-    padding: 0 8px;
+    min-height: 44px;
+    padding: 0 6px;
     font-size: 15px;
   }
   .confirm-dialog { width: calc(100vw - 24px); }
