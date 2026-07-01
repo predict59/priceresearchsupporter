@@ -99,6 +99,20 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .page-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 h1 { font-size: clamp(24px, 4vw, 34px); margin: 8px 0 18px; letter-spacing: 0; }
 h2 { font-size: 18px; margin: 0 0 10px; letter-spacing: 0; }
+.section-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.inline-missing {
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: #fff1f2;
+  color: #b91c1c;
+  font-size: 12px;
+  font-weight: 900;
+}
 .item-title {
   display: flex;
   flex-wrap: wrap;
@@ -877,15 +891,66 @@ textarea { min-height: 110px; resize: vertical; }
   min-height: 36px;
 }
 .inline-check input { width: auto; min-height: auto; }
+.pretty-check {
+  width: fit-content;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+}
+.pretty-check input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.pretty-check i {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 1px solid #94a3b8;
+  background: #fff;
+  display: inline-grid;
+  place-items: center;
+}
+.pretty-check i::after {
+  content: "";
+  width: 9px;
+  height: 5px;
+  border-left: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: rotate(-45deg) translate(1px, -1px);
+  opacity: 0;
+}
+.pretty-check input:checked + i {
+  background: #0f766e;
+  border-color: #0f766e;
+}
+.pretty-check input:checked + i::after {
+  opacity: 1;
+}
+.pretty-check input:disabled + i {
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+}
 .discount-controls {
   display: grid;
   gap: 2px;
 }
 .date-range {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  gap: 8px;
+  grid-template-columns: minmax(112px, 1fr) auto minmax(112px, 1fr);
+  gap: 6px;
   align-items: center;
+}
+.date-range input {
+  min-height: 40px;
+  padding: 8px 9px;
+  font-size: 14px;
 }
 .date-range.range-disabled {
   opacity: .55;
@@ -905,12 +970,6 @@ textarea { min-height: 110px; resize: vertical; }
   flex-wrap: wrap;
   gap: 7px;
   min-height: 42px;
-}
-.readonly-period strong {
-  color: #64748b;
-  font-size: 13px;
-  font-weight: 900;
-  margin-right: 2px;
 }
 .readonly-period span {
   border: 1px solid #c9d2d8;
@@ -984,12 +1043,6 @@ textarea { min-height: 110px; resize: vertical; }
 .discount-period-row {
   align-items: start;
 }
-.one-plus-check {
-  justify-content: flex-start;
-  font-size: 14px;
-  font-weight: 900;
-  color: #334155;
-}
 .price-panel > label {
   color: #334155;
   font-size: 13px;
@@ -1017,18 +1070,23 @@ textarea { min-height: 110px; resize: vertical; }
   border-bottom: 1px solid #e5ebef;
 }
 .memo-block {
-  padding: 12px;
-  border: 1px solid #e5ebef;
-  border-radius: 8px;
-  background: #f8fafc;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 .memo-block h3 {
-  margin: 0 0 4px;
-  font-size: 16px;
+  margin: 0 0 8px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 900;
 }
 .memo-chips button {
   min-height: 34px;
   font-size: 13px;
+  background: #fff;
+}
+.memo-block textarea {
   background: #fff;
 }
 .storage-meter {
@@ -1379,8 +1437,6 @@ textarea { min-height: 110px; resize: vertical; }
   .item-contact a { justify-content: center; }
   .photo-actions { grid-template-columns: 1fr; }
   .photo-picker > div { grid-template-columns: 1fr 1fr; }
-  .date-range { grid-template-columns: 1fr; }
-  .date-range b { text-align: center; }
   .price-feedback { margin-left: 0; }
   .save-fab { right: 12px; bottom: 14px; }
   .save-toast { right: 12px; bottom: 78px; }
