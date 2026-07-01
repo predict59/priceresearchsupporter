@@ -305,6 +305,27 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const updateVisualWidth = () => {
+      const topbarWidth = topbarRef.current?.getBoundingClientRect().width || Number.POSITIVE_INFINITY;
+      const visualWidth = window.visualViewport?.width || Number.POSITIVE_INFINITY;
+      const bodyWidth = document.body.clientWidth || Number.POSITIVE_INFINITY;
+      const width = Math.floor(Math.min(topbarWidth, visualWidth, bodyWidth));
+      if (Number.isFinite(width) && width > 0) {
+        document.documentElement.style.setProperty("--app-visual-width", `${width}px`);
+      }
+    };
+    updateVisualWidth();
+    window.addEventListener("resize", updateVisualWidth);
+    window.visualViewport?.addEventListener("resize", updateVisualWidth);
+    window.visualViewport?.addEventListener("scroll", updateVisualWidth);
+    return () => {
+      window.removeEventListener("resize", updateVisualWidth);
+      window.visualViewport?.removeEventListener("resize", updateVisualWidth);
+      window.visualViewport?.removeEventListener("scroll", updateVisualWidth);
+    };
+  }, [view]);
+
+  useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [view, currentRegion, selectedStoreId, selectedItemId]);
 
