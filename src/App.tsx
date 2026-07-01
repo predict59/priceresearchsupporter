@@ -301,7 +301,7 @@ function App() {
         return first ? { ...store, storeAddress: first.storeAddress || store.storeAddress, storeName: first.storeName || store.storeName } : store;
       });
       await saveParsedData(rebuilt.regions, parsedStores, parsedItems);
-      setAnalysis(`자료 분석 완료: 전체 품목 ${parsedItems.length.toLocaleString()}개 / 지역 ${rebuilt.regions.length}개 / 방문지 ${parsedStores.length}개 / 업체 연락처 매칭 ${Math.max(0, matched)}개`);
+      setAnalysis(`자료 분석 완료: 전체 품목 ${parsedItems.length.toLocaleString()}개 / 지역 ${rebuilt.regions.length}개 / 방문지 ${parsedStores.length}개 / 제조사 연락처 매칭 ${Math.max(0, matched)}개`);
       await refresh(rebuilt.regions[0]?.name);
       setView("regions");
     } catch (error) {
@@ -546,9 +546,13 @@ function App() {
 
   useEffect(() => {
     const armBackGuard = () => {
-      if (allowBrowserBackRef.current || history.state?.appGuard) return;
+      if (allowBrowserBackRef.current) return;
+      if (history.state?.appGuard) {
+        history.replaceState({ appGuard: true, appView: view }, "", location.href);
+        return;
+      }
       history.replaceState({ appRoot: true }, "", location.href);
-      history.pushState({ appGuard: true }, "", location.href);
+      history.pushState({ appGuard: true, appView: view }, "", location.href);
     };
     armBackGuard();
     window.setTimeout(armBackGuard, 250);
@@ -556,7 +560,7 @@ function App() {
       if (allowBrowserBackRef.current) return;
       if (canGoBackRef.current) {
         goBackRef.current();
-        history.pushState({ appGuard: true }, "", location.href);
+        history.pushState({ appGuard: true, appView: view }, "", location.href);
         return;
       }
       const nowMs = Date.now();
@@ -568,7 +572,7 @@ function App() {
       exitArmedUntilRef.current = nowMs + 2200;
       setExitMessage("한 번 더 뒤로가기를 누르면 종료됩니다.");
       window.setTimeout(() => setExitMessage(""), 2200);
-      history.pushState({ appGuard: true }, "", location.href);
+      history.pushState({ appGuard: true, appView: view }, "", location.href);
     };
     const onPageShow = () => armBackGuard();
     const onFirstInteraction = () => armBackGuard();
@@ -582,11 +586,11 @@ function App() {
       window.removeEventListener("pointerdown", onFirstInteraction);
       window.removeEventListener("touchstart", onFirstInteraction);
     };
-  }, []);
+  }, [view]);
   const screenTitle =
     view === "regions" ? "지역리스트"
-    : view === "workspace" ? "업체리스트"
-    : view === "store" ? "업체정보"
+    : view === "workspace" ? "마트리스트"
+    : view === "store" ? "마트정보"
     : view === "items" ? "물품리스트"
     : view === "item" ? "가격정보"
     : view === "validation" ? "검증"
@@ -594,7 +598,7 @@ function App() {
     : "자료 업로드";
   const topContext =
     view === "store" || view === "items" || view === "item"
-      ? `현재 업체: ${selectedStore?.storeName ?? selectedItem?.storeName ?? "-"}`
+      ? `현재 마트: ${selectedStore?.storeName ?? selectedItem?.storeName ?? "-"}`
       : view === "workspace" || view === "validation"
         ? currentRegion ? `현재 지역: ${currentRegion}` : ""
         : "";
@@ -635,7 +639,7 @@ function App() {
           <section className="upload-hero">
             <span>초기 설정</span>
             <h1>조사자료 업로드</h1>
-            <p>조사표와 업체 연락처 엑셀을 불러오면 현장 입력에 필요한 지역, 업체, 품목 목록이 자동으로 구성됩니다.</p>
+            <p>조사표와 마트 연락처 엑셀을 불러오면 현장 입력에 필요한 지역, 마트, 품목 목록이 자동으로 구성됩니다.</p>
             <ul className="upload-notes">
               <li>입력 자료와 조사 결과는 서버가 아닌 현재 기기의 브라우저 저장공간에 보관됩니다.</li>
               <li>인터넷이 불안정한 현장에서도 입력과 사진 첨부를 계속할 수 있습니다.</li>
@@ -647,7 +651,7 @@ function App() {
               <input type="file" accept={EXCEL_ACCEPT} onChange={(event) => setSurveyFile(event.target.files?.[0] ?? null)} />
               <span>{surveyFile?.name ?? "필수 파일을 선택하세요"}</span>
             </label>
-            <label className="file-card">업체 연락처 엑셀
+            <label className="file-card">마트 연락처 엑셀
               <input type="file" accept={EXCEL_ACCEPT} onChange={(event) => setContactFile(event.target.files?.[0] ?? null)} />
               <span>{contactFile?.name ?? "연락처 파일이 있으면 함께 선택하세요"}</span>
             </label>
@@ -696,7 +700,7 @@ function App() {
       {view === "workspace" && currentRegion && (
         <main className="page">
           <div className="sticky-search workspace-search">
-            <SearchBox value={storeQuery} onChange={setStoreQuery} placeholder="업체명 / 주소 / 품목명 / 품목코드 / 바코드" />
+            <SearchBox value={storeQuery} onChange={setStoreQuery} placeholder="마트명 / 주소 / 품목명 / 품목코드 / 바코드" />
             <button className="tool-toggle" onClick={() => setWorkspaceToolsOpen((value) => !value)} aria-expanded={workspaceToolsOpen}>
               <SlidersHorizontal size={18} /> 필터 {workspaceToolsOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </button>
@@ -768,7 +772,7 @@ function App() {
               <button type="button" className="warning-light" onClick={() => applyStoreOperatingStatus("임시휴업")}>임시휴업 처리</button>
             </div>
             <div className="store-address"><span>주소</span><strong>{selectedStore.storeAddress || "-"}</strong></div>
-            <div className="store-address store-photo-heading"><span>업체 전경사진</span><strong>업체사진</strong></div>
+            <div className="store-address store-photo-heading"><span>마트 전경사진</span></div>
             {(() => {
               const frontPhoto = photos.find((photo) => photo.id === selectedStore.frontPhotoId);
               return (
@@ -786,7 +790,7 @@ function App() {
           <section className="panel">
             <p>조사 품목: {storeItems.length.toLocaleString()}건</p>
             <label>방문 조사일<input type="date" value={selectedStore.surveyDate} onChange={async (event) => { await putStore({ ...selectedStore, surveyDate: event.target.value, updatedAt: now() }); await refresh(selectedStore.region); }} /></label>
-            <button className="primary sticky-lite" onClick={() => selectedStore.frontPhotoId ? (setItemQuery(""), setView("items")) : alert("업체 전경사진을 먼저 촬영/선택해 주세요.")}>조사 입력</button>
+            <button className="primary sticky-lite" onClick={() => selectedStore.frontPhotoId ? (setItemQuery(""), setView("items")) : alert("마트 전경사진을 먼저 촬영/선택해 주세요.")}>조사 입력</button>
           </section>
         </main>
       )}
@@ -991,7 +995,7 @@ function RegionSummary({ stats, itemStats }: { stats: RegionStats; itemStats: Re
   return (
     <div className="region-summary">
       <div className="region-metric">
-        <span>업체</span>
+        <span>마트</span>
         <strong>{stats.completed.toLocaleString()}<small>/{stats.total.toLocaleString()}</small></strong>
         <div className="mini-progress"><i style={{ width: `${storePercent}%` }} /></div>
         <em>미조사 {stats.notStarted.toLocaleString()}</em>
@@ -1095,7 +1099,7 @@ function StoreCard({
           <p>{store.storeAddress || "주소 없음"}</p>
         </div>
         <details className="card-menu">
-          <summary aria-label="업체 메뉴"><MoreVertical size={18} /></summary>
+          <summary aria-label="마트 메뉴"><MoreVertical size={18} /></summary>
           <div className="menu-popover">
             {mapLinks(store.storeAddress).map(([name, href]) => <a key={name} href={href} target="_blank"><MapPin size={15} />{name} 지도</a>)}
           </div>
@@ -1103,13 +1107,13 @@ function StoreCard({
       </div>
       <div className="store-progress">
         <div className="store-progress-head">
-          <strong>업체: 완료 {stats.completed.toLocaleString()} / 전체 {stats.total.toLocaleString()}</strong>
+          <strong>마트: 완료 {stats.completed.toLocaleString()} / 전체 {stats.total.toLocaleString()}</strong>
           <span>미조사 {(stats.total - stats.completed).toLocaleString()}</span>
         </div>
         <div className="progress-line"><span style={{ width: `${percent}%` }} /></div>
       </div>
       <div className="store-meta">
-        <span className={`store-photo-badge ${store.frontPhotoId ? "done" : ""}`}>업체사진</span>
+        <span className={`store-photo-badge ${store.frontPhotoId ? "done" : ""}`}>마트사진</span>
         {stats.photoMissing > 0 && <span className="store-missing">품목사진 누락 {stats.photoMissing.toLocaleString()}건</span>}
         <span className="store-date">조사일: {latestSurveyDate}</span>
       </div>
@@ -1146,14 +1150,14 @@ function SummaryModal({ region, stats, storeCount, completedStoreCount, onClose 
         <div className="modal-head">
           <div>
             <h2>{region ?? "현재 지역"} 현황</h2>
-            <p>업체와 품목 기준 진행률입니다.</p>
+            <p>마트와 품목 기준 진행률입니다.</p>
           </div>
           <button className="icon-button" onClick={onClose} aria-label="닫기"><X size={18} /></button>
         </div>
         <Stats stats={stats} />
         <div className="summary-grid">
           <div><strong>{storeCount.toLocaleString()}</strong><span>방문지</span></div>
-          <div><strong>{completedStoreCount.toLocaleString()}</strong><span>완료 업체</span></div>
+          <div><strong>{completedStoreCount.toLocaleString()}</strong><span>완료 마트</span></div>
           <div><strong>{stats.completed.toLocaleString()}</strong><span>완료 품목</span></div>
           <div><strong>{(stats.total - stats.completed).toLocaleString()}</strong><span>남은 품목</span></div>
         </div>
@@ -1166,14 +1170,14 @@ function Contacts({ items }: { items: SurveyItem[] }) {
   const contacts = Array.from(new Map(items.map((item) => [`${item.companyName}|${item.companyManager}|${item.companyTel}`, item])).values());
   return (
     <section className="panel">
-      <h2>업체 연락처</h2>
+      <h2>마트 연락처</h2>
       {contacts.length === 0 && <p className="warn">확인 필요: 연락처 정보가 없습니다.</p>}
       {contacts.map((item) => {
         const count = items.filter((candidate) => candidate.companyName === item.companyName && candidate.companyManager === item.companyManager && candidate.companyTel === item.companyTel).length;
         return (
           <div className="contact" key={`${item.companyName}-${item.companyManager}-${item.companyTel}`}>
             <dl className="contact-info">
-              <dt>업체명</dt><dd>{item.companyName || "확인 필요"}</dd>
+              <dt>제조사</dt><dd>{item.companyName || "확인 필요"}</dd>
               <dt>담당자</dt><dd>{item.companyManager || "확인 필요"}</dd>
               <dt>전화</dt><dd>{item.companyTel ? <a href={`tel:${item.companyTel.replace(/[^\d+]/g, "")}`}><Phone size={15} />{item.companyTel}</a> : <span className="warn">확인 필요</span>}</dd>
               <dt>품목</dt><dd>{count.toLocaleString()}개</dd>
@@ -1190,7 +1194,8 @@ function ItemContact({ item }: { item: SurveyItem }) {
   return (
     <section className={`item-contact ${hasAnyContact && item.companyTel ? "" : "needs-check"}`}>
       <div>
-        <strong>{item.companyName || "업체명 확인 필요"}</strong>
+        <h2>담당자 정보</h2>
+        <strong>{item.companyName || "제조사 확인 필요"}</strong>
         <span>담당자: {item.companyManager || "확인 필요"}</span>
       </div>
       {item.companyTel ? <a href={`tel:${item.companyTel.replace(/[^\d+]/g, "")}`}><Phone size={15} />{item.companyTel}</a> : <span className="warn">연락처 확인 필요</span>}
@@ -1379,7 +1384,7 @@ function ItemEditor({ item, storeItems, photos, onPhoto, onDeletePhoto, onSave, 
         const nextId = nextTodoId();
         if (nextId) {
           if (await askConfirm({ title: "저장되었습니다", message: "다음 미등록 상품으로 이동할까요?", confirmText: "이동", cancelText: "현재 품목 보기" })) onMove(nextId);
-        } else if (await askConfirm({ title: "전 품목 입력완료", message: "업체리스트로 돌아갈까요?", confirmText: "예", cancelText: "아니오" })) {
+        } else if (await askConfirm({ title: "전 품목 입력완료", message: "마트리스트로 돌아갈까요?", confirmText: "예", cancelText: "아니오" })) {
           onStoreList();
         }
       } else {
@@ -1404,7 +1409,7 @@ function ItemEditor({ item, storeItems, photos, onPhoto, onDeletePhoto, onSave, 
   };
   return <main className="page item-page"><section className="item-hero compact-hero"><div><h1 className="item-title"><span className="item-code">{draft.itemNo}</span><span>{draft.productName}</span></h1><Badge text={draft.status} /></div></section>
     <ItemContact item={draft} />
-    <details className="panel" open><summary>① 업체 제시정보</summary><Info item={draft} /></details>
+    <details className="panel" open><summary>① 국군복지단 제시정보</summary><Info item={draft} /></details>
     <section className="panel"><h2>② 실물 확인</h2><Choice label="정상진열" value={draft.normalDisplay} values={["O", "X"]} onChange={(value) => update({ normalDisplay: value as SurveyItem["normalDisplay"], photoCase: value === "X" ? "POS_ONLY" : value === "O" ? "NORMAL" : "", specMatch: value === "X" ? "" : draft.specMatch, barcodeMatch: value === "X" ? "" : draft.barcodeMatch, barcodeRegistered: value === "O" ? "" : draft.barcodeRegistered, abnormalStatus: value === "O" ? "" : draft.abnormalStatus, posChecked: value === "O" ? "" : draft.posChecked, posPrice: null, abnormalDisplay: value === "X" ? "" : draft.abnormalDisplay })} /><Choice label="규격일치" disabled={draft.normalDisplay !== "O"} value={draft.normalDisplay === "O" ? draft.specMatch : ""} values={["O", "X"]} onChange={(value) => update({ specMatch: value as SurveyItem["specMatch"] })} /><Choice label="바코드일치" disabled={draft.normalDisplay !== "O"} value={draft.normalDisplay === "O" ? draft.barcodeMatch : ""} values={["O", "X"]} onChange={(value) => update({ barcodeMatch: value as SurveyItem["barcodeMatch"] })} /></section>
     <section className={`panel ${draft.normalDisplay === "X" ? "" : "disabled-block"}`}><h2>③ 상태 <small className="section-note">(정상진열 X 시 입력)</small></h2><Choice label="바코드 등록 여부" disabled={draft.normalDisplay !== "X"} value={draft.normalDisplay === "X" ? draft.barcodeRegistered : ""} values={["O", "X"]} onChange={(value) => update({ barcodeRegistered: value as SurveyItem["barcodeRegistered"] })} /><Choice label="판매여부" disabled={draft.normalDisplay !== "X"} value={draft.normalDisplay === "X" ? draft.abnormalStatus : ""} values={["미진열", "미판매"]} onChange={(value) => update({ abnormalStatus: value as SurveyItem["abnormalStatus"] })} /><Choice label="POS 조회 여부" disabled={draft.normalDisplay !== "X"} value={draft.normalDisplay === "X" ? draft.posChecked : ""} values={["조회함", "조회불가"]} onChange={updatePosChecked} /></section>
     <section className="panel"><h2 className="section-title-row">④ 사진자료 {missing.length > 0 && <span className="inline-missing">사진누락: {missing.join(", ")}</span>}</h2>{!draft.normalDisplay && <p className="notice">먼저 ② 실물 확인에서 정상진열 O/X를 선택하면 필요한 사진 입력칸이 표시됩니다.</p>}{draft.normalDisplay === "O" && <p className="small-help barcode-help">참고: 제품정보사진 촬영 시 브라우저가 지원하면 바코드를 자동 비교합니다.</p>}{photoMessage && draft.normalDisplay === "O" && <p className="ok upload-message">{photoMessage}</p>}{draft.normalDisplay === "O" && <><PhotoSlot id="photo-product-display" label="제품진열사진" description="가격정보와 진열상품이 동시노출 되도록 촬영" photo={itemPhotos.display} onFile={(file) => upload("PRODUCT_DISPLAY", file)} onDelete={onDeletePhoto} /><PhotoSlot id="photo-product-info" label="제품정보사진" description="상품후면 제품상세정보와 바코드 동시노출 되도록 촬영" photo={itemPhotos.info} onFile={(file) => upload("PRODUCT_INFO_BARCODE", file)} onDelete={onDeletePhoto} /></>}{draft.normalDisplay === "X" && <PhotoSlot id="photo-pos-receipt" label="POS/영수증사진" description="제품진열사진으로 가격정보 확인불가 시 POS기 또는 영수증 촬영" photo={itemPhotos.pos} onFile={(file) => upload("POS_RECEIPT", file)} onDelete={onDeletePhoto} />}</section>
@@ -1464,7 +1469,7 @@ function PhotoSlot({ id, label, description, photo, onFile, onDelete }: { id: st
 }
 
 function Info({ item }: { item: SurveyItem }) {
-  return <dl className="info"><dt>업체명</dt><dd>{item.companyName}</dd><dt>업체연락처</dt><dd>{item.companyTel}</dd><dt>마트명</dt><dd>{item.martName}</dd><dt>바코드</dt><dd>{item.barcode}</dd><dt>물품명</dt><dd>{item.productName}</dd><dt>규격</dt><dd>{item.spec}</dd><dt>기준가격</dt><dd>{item.basePrice !== null ? `${item.basePrice.toLocaleString()}원` : "-"}</dd></dl>;
+  return <dl className="info"><dt>제조사</dt><dd>{item.companyName}</dd><dt>제조사 연락처</dt><dd>{item.companyTel}</dd><dt>마트명</dt><dd>{item.martName}</dd><dt>바코드</dt><dd>{item.barcode}</dd><dt>물품명</dt><dd>{item.productName}</dd><dt>규격</dt><dd>{item.spec}</dd><dt>기준가격</dt><dd>{item.basePrice !== null ? `${item.basePrice.toLocaleString()}원` : "-"}</dd></dl>;
 }
 
 function DiscountControls({

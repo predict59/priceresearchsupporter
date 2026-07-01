@@ -37,8 +37,8 @@ export async function exportRegionExcel(region: string, items: SurveyItem[]) {
   ];
   const headers = [
     "순번",
-    "업체명",
-    "업체연락처",
+    "제조사",
+    "제조사연락처",
     "마트명",
     "바코드",
     "물품명",

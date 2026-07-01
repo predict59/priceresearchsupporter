@@ -7,7 +7,7 @@ export function photosForItem(item: SurveyItem, storePhotos: SurveyPhoto[]) {
 export function requiredPhotoLabels(item: SurveyItem, photos: SurveyPhoto[]) {
   const hasFront = photos.some((photo) => photo.type === "STORE_FRONT");
   const missing = productPhotoMissingLabels(item, photos);
-  if (!hasFront) return ["업체사진", ...missing];
+  if (!hasFront) return ["마트사진", ...missing];
   return missing;
 }
 
