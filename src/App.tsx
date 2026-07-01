@@ -629,7 +629,6 @@ function App() {
     : view === "validation" ? "검증"
     : view === "backup" ? "백업/복원"
     : "자료 업로드";
-  const menuRegionStats = useMemo(() => currentRegion ? regionSummary(currentRegion) : emptyStats, [currentRegion, stores, items, photos]);
   const menuAllRegionStats = useMemo(() => {
     const summaries = regions.map((region) => regionSummary(region.name));
     const completed = summaries.filter((summary) => summary.total > 0 && summary.completed === summary.total).length;
@@ -642,16 +641,9 @@ function App() {
       photoMissing: summaries.reduce((sum, summary) => sum + summary.photoMissing, 0),
     };
   }, [regions, stores, items, photos, currentRegion]);
-  const menuItemStats = useMemo(() => (view === "store" || view === "items" || view === "item") && selectedStore
-    ? summarize(storeItems, photos.filter((photo) => photo.storeId === selectedStore.id))
-    : currentRegion ? summarize(regionItems, photos) : emptyStats, [view, selectedStore, storeItems, regionItems, photos, currentRegion]);
   const menuContext = view === "store" || view === "items" || view === "item"
     ? (selectedStore?.storeName ?? selectedItem?.storeName)
     : "";
-  const menuProgressPercent =
-    view === "regions"
-      ? (menuAllRegionStats.total ? Math.round((menuAllRegionStats.completed / menuAllRegionStats.total) * 100) : 0)
-      : (menuItemStats.total ? Math.round((menuItemStats.completed / menuItemStats.total) * 100) : 0);
 
   if (isBooting) {
     return (
@@ -679,15 +671,11 @@ function App() {
         <div className="top-actions">
           <div className="menu-status">
             {view === "regions"
-              ? <span>지역 <strong>{menuAllRegionStats.completed.toLocaleString()} / {menuAllRegionStats.total.toLocaleString()}</strong></span>
+              ? <span>화면 <strong>메인</strong></span>
               : <span>지역 <strong>{currentRegion || "-"}</strong></span>}
             {menuContext && <span>마트 <strong>{menuContext}</strong></span>}
-            <div className="menu-progress"><i style={{ width: `${menuProgressPercent}%` }} /></div>
-            {view === "regions" && <small>지역 {menuAllRegionStats.completed.toLocaleString()} / {menuAllRegionStats.total.toLocaleString()}</small>}
-            {view === "workspace" && <small>마트 {menuRegionStats.completed.toLocaleString()} / {menuRegionStats.total.toLocaleString()} · 품목 {menuItemStats.completed.toLocaleString()} / {menuItemStats.total.toLocaleString()}</small>}
-            {(view === "store" || view === "items" || view === "item") && <small>품목 {menuItemStats.completed.toLocaleString()} / {menuItemStats.total.toLocaleString()}</small>}
-            {(view === "upload" || view === "backup" || view === "validation") && <small>품목 {menuItemStats.completed.toLocaleString()} / {menuItemStats.total.toLocaleString()} · 마트 {menuRegionStats.completed.toLocaleString()} / {menuRegionStats.total.toLocaleString()}</small>}
           </div>
+          <button onClick={() => { setSummaryOpen(true); setMenuOpen(false); }}>진행률 확인</button>
           <button onClick={() => { setStoreQuery(""); setItemQuery(""); setView("regions"); setMenuOpen(false); }}>HOME</button>
           <button disabled={!currentRegion} onClick={() => { setView("validation"); setMenuOpen(false); }}>검증</button>
           <button onClick={() => { setView("backup"); setMenuOpen(false); }}>백업/복원</button>
@@ -944,6 +932,15 @@ function App() {
         />
       )}
       {confirmState && <ConfirmDialog state={confirmState} onClose={closeConfirm} />}
+      {summaryOpen && view === "regions" && (
+        <SummaryModal
+          region="전체 지역"
+          stats={menuAllRegionStats}
+          storeCount={regions.length}
+          completedStoreCount={menuAllRegionStats.completed}
+          onClose={() => setSummaryOpen(false)}
+        />
+      )}
       {summaryOpen && view === "workspace" && (
         <SummaryModal
           region={currentRegion}
@@ -1135,6 +1132,8 @@ function StoreCard({
   const completed = items.filter((item) => item.status === "완료");
   const latestSurveyDate = completed.map((item) => item.surveyDate).filter(Boolean).sort().at(-1) ?? "-";
   const percent = stats.total ? Math.round((stats.completed / stats.total) * 100) : 0;
+  const completedStore = stats.total > 0 && stats.completed === stats.total;
+  const displayOperatingStatus = store.frontPhotoId ? (store.operatingStatus ?? "영업 중") : "미확인";
   if (orderEditing) {
     return (
       <article id={`store-card-${store.id}`} className={`visit-order-row ${focused ? "focused" : ""} ${dragging ? "dragging" : ""}`} draggable onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}>
@@ -1153,10 +1152,10 @@ function StoreCard({
   }
 
   return (
-    <article id={`store-card-${store.id}`} className={`card store-card ${focused ? "focused" : ""}`}>
+    <article id={`store-card-${store.id}`} className={`card store-card ${focused ? "focused" : ""} ${completedStore ? "completed" : ""}`}>
       <div className="card-head">
         <div>
-          <h2 className="store-card-title" title={store.storeName}><span className="store-name-text">{store.storeName}</span><span className={`operating-badge small ${operatingClass(store.operatingStatus)}`}>{store.operatingStatus ?? "영업 중"}</span></h2>
+          <h2 className="store-card-title" title={store.storeName}><span className="store-name-text">{store.storeName}</span><span className={`operating-badge small ${store.frontPhotoId ? operatingClass(store.operatingStatus) : "unknown"}`}>{displayOperatingStatus}</span></h2>
           <p>{store.storeAddress || "주소 없음"}</p>
         </div>
         <details className="card-menu">
@@ -1167,19 +1166,19 @@ function StoreCard({
         </details>
       </div>
       <div className="store-progress">
-        <div className="store-progress-head">
-          <strong>물품: 완료 {stats.completed.toLocaleString()} / 전체 {stats.total.toLocaleString()}</strong>
-          <span>미조사 {(stats.total - stats.completed).toLocaleString()}</span>
+        <div className="store-metric-row">
+          <span>물품</span>
+          <strong>{stats.completed.toLocaleString()}<small>/{stats.total.toLocaleString()}</small></strong>
+          <em>미조사 {(stats.total - stats.completed).toLocaleString()}</em>
         </div>
         <div className="progress-line"><span style={{ width: `${percent}%` }} /></div>
       </div>
       <div className="store-meta">
-        <span className={`store-photo-badge ${store.frontPhotoId ? "done" : ""}`}>마트사진</span>
         {stats.photoMissing > 0 && <span className="store-missing">품목사진 누락 {stats.photoMissing.toLocaleString()}건</span>}
         <span className="store-date">조사일: {latestSurveyDate}</span>
       </div>
       <div className="card-actions">
-        <button onClick={onContacts}><Phone size={16} />담당자 정보</button>
+        <button onClick={onContacts}>담당자 정보</button>
         <button className="primary" onClick={onOpen}>입력</button>
       </div>
     </article>
@@ -1258,9 +1257,8 @@ function ItemContact({ item }: { item: SurveyItem }) {
         <h2>담당자 정보</h2>
         <strong>{item.companyName || "제조사 확인 필요"}</strong>
         <span>담당자명: {item.companyManager || "확인 필요"}</span>
-        <span>연락처: {item.companyTel || "확인 필요"}</span>
+        <span>연락처: {item.companyTel ? <a href={`tel:${item.companyTel.replace(/[^\d+]/g, "")}`}>{item.companyTel}</a> : "확인 필요"}</span>
       </div>
-      {item.companyTel && <a href={`tel:${item.companyTel.replace(/[^\d+]/g, "")}`}><Phone size={15} />전화</a>}
     </section>
   );
 }
@@ -1474,7 +1472,7 @@ function ItemEditor({ item, storeItems, photos, onPhoto, onDeletePhoto, onSave, 
     }
     else setSaveMessage("마지막 품목입니다.");
   };
-  return <main className="page item-page"><section className="item-hero compact-hero"><div><h1 className="item-title"><span className="item-code">{draft.itemNo}</span><span>{draft.productName}</span></h1><Badge text={draft.status} /></div></section>
+  return <main className="page item-page"><section className="item-hero"><div className="item-hero-row"><span className="item-code">{draft.itemNo}</span><strong className="item-hero-name" title={draft.productName}>{draft.productName}</strong><Badge text={draft.status} /></div></section>
     <ItemContact item={draft} />
     <details className="panel" open><summary>① 국군복지단 제시정보</summary><Info item={draft} /></details>
     <section className="panel"><h2>② 실물 확인</h2><Choice label="정상진열" value={draft.normalDisplay} values={["O", "X"]} onChange={(value) => update({ normalDisplay: value as SurveyItem["normalDisplay"], photoCase: value === "X" ? "POS_ONLY" : value === "O" ? "NORMAL" : "", specMatch: value === "X" ? "" : draft.specMatch, barcodeMatch: value === "X" ? "" : draft.barcodeMatch, barcodeRegistered: value === "O" ? "" : draft.barcodeRegistered, abnormalStatus: value === "O" ? "" : draft.abnormalStatus, posChecked: value === "O" ? "" : draft.posChecked, posPrice: null, abnormalDisplay: value === "X" ? "" : draft.abnormalDisplay })} /><Choice label="규격일치" disabled={draft.normalDisplay !== "O"} value={draft.normalDisplay === "O" ? draft.specMatch : ""} values={["O", "X"]} onChange={(value) => update({ specMatch: value as SurveyItem["specMatch"] })} /><Choice label="바코드일치" disabled={draft.normalDisplay !== "O"} value={draft.normalDisplay === "O" ? draft.barcodeMatch : ""} values={["O", "X"]} onChange={(value) => update({ barcodeMatch: value as SurveyItem["barcodeMatch"] })} /></section>
