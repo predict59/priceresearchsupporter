@@ -588,7 +588,7 @@ function App() {
     };
   }, [view]);
   const screenTitle =
-    view === "regions" ? "지역리스트"
+    view === "regions" ? "메인"
     : view === "workspace" ? "마트리스트"
     : view === "store" ? "마트정보"
     : view === "items" ? "물품리스트"

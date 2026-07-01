@@ -58,7 +58,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .top-actions {
   display: none;
   position: absolute;
-  right: clamp(10px, 3vw, 18px);
+  right: 0;
   top: 52px;
   width: min(230px, calc(100vw - 20px));
   border: 1px solid #c9d2d8;
@@ -407,14 +407,7 @@ textarea { min-height: 110px; resize: vertical; }
   font-weight: 900;
 }
 .stats-photo-ok {
-  justify-self: start;
-  border-radius: 999px;
-  padding: 4px 9px;
-  background: #eff6ff;
-  color: #1d4ed8;
-  border: 1px solid #bfdbfe;
-  font-size: 13px;
-  font-weight: 900;
+  display: none;
 }
 .badge {
   border-radius: 999px;
@@ -855,16 +848,19 @@ textarea { min-height: 110px; resize: vertical; }
 .operating-badge {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   border-radius: 999px;
   padding: 4px 9px;
+  min-width: max-content;
   font-size: 12px;
   font-weight: 900;
   vertical-align: middle;
   white-space: nowrap;
 }
 .operating-badge.small {
-  margin-left: 5px;
+  margin-left: 0;
   transform: translateY(-1px);
+  flex: 0 0 auto;
 }
 .operating-영업중 {
   background: #dcfce7;
@@ -1303,12 +1299,16 @@ textarea { min-height: 110px; resize: vertical; }
   gap: 10px;
   align-items: start;
 }
+.card-head > div {
+  min-width: 0;
+}
 .store-card-title {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) max-content;
   align-items: center;
   gap: 6px;
   min-width: 0;
+  max-width: 100%;
 }
 .store-name-text {
   min-width: 0;
@@ -1583,13 +1583,16 @@ textarea { min-height: 110px; resize: vertical; }
     padding-right: 10px;
   }
   .item-action-fab {
-    left: 28px;
-    right: 28px;
-    width: auto;
-    max-width: none;
-    transform: none;
+    left: 50%;
+    right: auto;
+    width: min(76svw, 420px);
+    max-width: 76svw;
+    transform: translateX(-50%);
     grid-template-columns: 1fr 1.2fr 1fr;
   }
-  .item-action-fab button { padding: 0 10px; }
+  .item-action-fab button {
+    padding: 0 8px;
+    font-size: 15px;
+  }
   .confirm-dialog { width: calc(100vw - 24px); }
 }
