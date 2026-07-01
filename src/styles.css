@@ -1326,8 +1326,8 @@ textarea { min-height: 110px; resize: vertical; }
 .item-action-fab {
   position: fixed;
   left: 50%;
-  width: min(680px, calc(100dvw - 32px));
-  max-width: calc(100dvw - 32px);
+  width: min(680px, calc(100% - 56px));
+  max-width: calc(100% - 56px);
   transform: translateX(-50%);
   bottom: 14px;
   z-index: 25;
@@ -1746,11 +1746,11 @@ textarea { min-height: 110px; resize: vertical; }
     padding-right: 10px;
   }
   .item-action-fab {
-    left: 50%;
+    left: 10px;
     right: auto;
     width: calc(100dvw - 20px);
     max-width: calc(100dvw - 20px);
-    transform: translateX(-50%);
+    transform: none;
     grid-template-columns: 1fr 1.2fr 1fr;
     border-radius: 16px;
     gap: 6px;
