@@ -202,12 +202,6 @@ h2 { font-size: 18px; margin: 0 0 10px; letter-spacing: 0; }
   flex-wrap: wrap;
   gap: 5px;
 }
-.badge-photo-missing {
-  background: #dc2626;
-  color: #fff;
-  border: 1px solid #dc2626;
-  font-weight: 900;
-}
 .item-card.focused {
   border-color: #0f766e;
   box-shadow: 0 0 0 3px rgba(15, 118, 110, .12);
@@ -478,6 +472,13 @@ textarea { min-height: 110px; resize: vertical; }
   color: #2f3a40;
   font-size: 14px;
   font-weight: 700;
+}
+.item-badge-stack .badge-photo-missing,
+.item-badge-stack .badge-사진누락 {
+  background: #dc2626;
+  color: #fff;
+  border: 1px solid #dc2626;
+  font-weight: 900;
 }
 .warn { color: #b91c1c; }
 .ok { color: #15803d; font-weight: 800; }
