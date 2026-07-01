@@ -790,7 +790,10 @@ textarea { min-height: 110px; resize: vertical; }
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
-  margin-top: 12px;
+  margin: -4px 0 18px;
+}
+.store-photo-heading {
+  margin-top: 16px;
 }
 .meta-label {
   color: #64748b;
@@ -884,6 +887,14 @@ textarea { min-height: 110px; resize: vertical; }
   gap: 8px;
   align-items: center;
 }
+.date-range.range-disabled {
+  opacity: .55;
+  filter: grayscale(.15);
+}
+.date-range.range-disabled input {
+  background: #eef2f4;
+  color: #94a3b8;
+}
 .date-range b {
   color: #64748b;
   font-weight: 900;
@@ -894,6 +905,12 @@ textarea { min-height: 110px; resize: vertical; }
   flex-wrap: wrap;
   gap: 7px;
   min-height: 42px;
+}
+.readonly-period strong {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 900;
+  margin-right: 2px;
 }
 .readonly-period span {
   border: 1px solid #c9d2d8;
@@ -963,6 +980,15 @@ textarea { min-height: 110px; resize: vertical; }
 .price-panel > label,
 .price-panel .field-row {
   margin-bottom: 14px;
+}
+.discount-period-row {
+  align-items: start;
+}
+.one-plus-check {
+  justify-content: flex-start;
+  font-size: 14px;
+  font-weight: 900;
+  color: #334155;
 }
 .price-panel > label {
   color: #334155;

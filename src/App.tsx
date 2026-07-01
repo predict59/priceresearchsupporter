@@ -38,6 +38,8 @@ const appendMemoText = (memo: string, text: string) => {
   if (parts.includes(text)) return memo;
   return parts.length ? `${parts.join(" / ")} / ${text}` : text;
 };
+const removeMemoTexts = (memo: string, texts: string[]) =>
+  memo.split("/").map((part) => part.trim()).filter((part) => part && !texts.includes(part)).join(" / ");
 const periodTypeFromDates = (start: string, end: string) => {
   if (!start || !end) return "";
   const startTime = new Date(`${start}T00:00:00`).getTime();
@@ -158,7 +160,7 @@ function App() {
   const [regionQuery, setRegionQuery] = useState("");
   const [storeQuery, setStoreQuery] = useState("");
   const [itemQuery, setItemQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>("미완료");
+  const [filter, setFilter] = useState<Filter>("전체");
   const [surveyFile, setSurveyFile] = useState<File | null>(null);
   const [contactFile, setContactFile] = useState<File | null>(null);
   const [analysis, setAnalysis] = useState("");
@@ -312,7 +314,7 @@ function App() {
     setSelectedItemId("");
     setStoreQuery("");
     setItemQuery("");
-    setFilter("미완료");
+    setFilter("전체");
     setOrderEditing(false);
     setDragStoreId("");
     await refresh(region);
@@ -417,7 +419,7 @@ function App() {
     const memoText = status === "폐업" ? "판매처 폐점" : "임시휴업";
     const ok = await askConfirm({
       title: `${status} 처리할까요?`,
-      message: `${selectedStore.storeName} 하위 모든 품목을 일괄 변경합니다.\n\n이미 입력한 가격정보가 있어도 정상진열 X, 바코드등록여부 X, 판매여부 미판매, 특이사항 ${memoText} 상태로 바뀝니다.`,
+      message: `${selectedStore.storeName} 하위 모든 품목을 일괄 변경합니다.\n\n이미 입력한 가격정보가 있어도 일괄로 데이터가 바뀝니다.`,
       confirmText: `${status} 처리`,
       cancelText: "취소",
       danger: true,
@@ -708,8 +710,12 @@ function App() {
               <span>현재상태</span>
               <strong className={`operating-badge ${operatingClass(selectedStore.operatingStatus)}`}>{selectedStore.operatingStatus ?? "영업 중"}</strong>
             </div>
+            <div className="store-state-actions">
+              <button type="button" className="danger-light" onClick={() => applyStoreOperatingStatus("폐업")}>폐업 처리</button>
+              <button type="button" className="warning-light" onClick={() => applyStoreOperatingStatus("임시휴업")}>임시휴업 처리</button>
+            </div>
             <div className="store-address"><span>주소</span><strong>{selectedStore.storeAddress || "-"}</strong></div>
-            <h2>업체 전경사진</h2>
+            <div className="store-address store-photo-heading"><span>업체 전경사진</span><strong>업체사진</strong></div>
             {(() => {
               const frontPhoto = photos.find((photo) => photo.id === selectedStore.frontPhotoId);
               return (
@@ -722,10 +728,6 @@ function App() {
             </div>
               );
             })()}
-            <div className="store-state-actions">
-              <button type="button" className="danger-light" onClick={() => applyStoreOperatingStatus("폐업")}>폐업 처리</button>
-              <button type="button" className="warning-light" onClick={() => applyStoreOperatingStatus("임시휴업")}>임시휴업 처리</button>
-            </div>
           </section>
           <Contacts items={storeItems} />
           <section className="panel">
@@ -1237,6 +1239,7 @@ function ItemEditor({ item, storeItems, photos, onPhoto, onDeletePhoto, onSave, 
     if (parts.includes(text)) return draft.memo;
     return parts.length ? `${parts.join(" / ")} / ${text}` : text;
   };
+  const cleanDiscountMemo = () => removeMemoTexts(draft.memo, ["상시할인", "할인 정보 확인 불가"]);
   const updatePosChecked = (value: string) => {
     update({
       posChecked: value as SurveyItem["posChecked"],
@@ -1244,13 +1247,14 @@ function ItemEditor({ item, storeItems, photos, onPhoto, onDeletePhoto, onSave, 
     });
   };
   const updateDiscountMode = (mode: NonNullable<SurveyItem["discountPeriodMode"]>) => {
+    const baseMemo = cleanDiscountMemo();
     if (mode === "상시할인") {
       update({
         discountPeriodMode: mode,
         discountStartDate: "",
         discountEndDate: "",
         discountType: "②",
-        memo: appendMemo("상시할인"),
+        memo: appendMemoText(baseMemo, "상시할인"),
       });
       return;
     }
@@ -1260,13 +1264,22 @@ function ItemEditor({ item, storeItems, photos, onPhoto, onDeletePhoto, onSave, 
         discountStartDate: "",
         discountEndDate: "",
         discountType: "",
-        memo: appendMemo("할인 정보 확인 불가"),
+        memo: appendMemoText(baseMemo, "할인 정보 확인 불가"),
       });
       return;
     }
     update({
       discountPeriodMode: mode,
       discountType: periodTypeFromDates(draft.discountStartDate, draft.discountEndDate),
+      memo: baseMemo,
+    });
+  };
+  const updateOnePlusOne = (checked: boolean) => {
+    const memo = checked ? appendMemo("1+1 행사") : removeMemoTexts(draft.memo, ["1+1 행사"]);
+    update({
+      hasDiscount: checked ? true : draft.hasDiscount,
+      discountPrice: checked && draft.normalPrice !== null ? Math.round(draft.normalPrice / 2) : draft.discountPrice,
+      memo,
     });
   };
   const updateDiscountDate = (field: "discountStartDate" | "discountEndDate", value: string) => {
@@ -1332,10 +1345,14 @@ function ItemEditor({ item, storeItems, photos, onPhoto, onDeletePhoto, onSave, 
       <h2>⑤ 가격</h2>
       <p className="price-base">기준가격: <strong>{draft.basePrice?.toLocaleString() ?? "-"}원</strong></p>
       {priceBlocked && <p className="small-help warn">바코드 미등록 미판매 상품은 가격 입력을 생략합니다.</p>}
-      <Money label="정상가" disabled={priceBlocked} value={draft.normalPrice} onChange={(value) => update({ normalPrice: num(value) })} />
+      <Money label="정상가" disabled={priceBlocked} value={draft.normalPrice} onChange={(value) => { const normalPrice = num(value); update({ normalPrice, discountPrice: draft.memo.includes("1+1 행사") && normalPrice !== null ? Math.round(normalPrice / 2) : draft.discountPrice }); }} />
       {priceFeedback && <div className={`price-feedback ${priceFeedback.type}`}>{priceFeedback.messages.map((message) => <span key={message}><i aria-hidden="true">{priceFeedback.type === "warn" ? "!" : "✓"}</i>{message}</span>)}</div>}
       <Choice label="할인 여부" disabled={priceBlocked} value={draft.hasDiscount === null ? "" : draft.hasDiscount ? "할인 있음" : "할인 없음"} values={["할인 없음", "할인 있음"]} onChange={(value) => update({ hasDiscount: value === "할인 있음" })} />
       <div className={draft.hasDiscount === false || priceBlocked ? "disabled-block" : ""}>
+        <div className="field-row">
+          <span>1+1 행사여부</span>
+          <label className="inline-check one-plus-check"><input type="checkbox" disabled={draft.hasDiscount === false || priceBlocked} checked={draft.memo.includes("1+1 행사")} onChange={(event) => updateOnePlusOne(event.target.checked)} /> 1+1 행사</label>
+        </div>
         <Money label="할인가" value={draft.discountPrice} disabled={draft.hasDiscount === false || priceBlocked} onChange={(value) => update({ discountPrice: num(value) })} />
         <DiscountControls
           disabled={draft.hasDiscount === false || priceBlocked}
@@ -1345,7 +1362,7 @@ function ItemEditor({ item, storeItems, photos, onPhoto, onDeletePhoto, onSave, 
           end={draft.discountEndDate}
           periodType={draft.discountType}
           onMode={updateDiscountMode}
-          onOral={(discountOral) => update({ discountOral, memo: discountOral ? appendMemo("구두확인") : draft.memo })}
+          onOral={(discountOral) => update({ discountOral, memo: discountOral ? appendMemo("구두확인") : removeMemoTexts(draft.memo, ["구두확인"]) })}
           onDate={updateDiscountDate}
         />
       </div>
@@ -1408,7 +1425,7 @@ function DiscountControls({
   const datesDisabled = disabled || mode !== "기간 할인";
   return (
     <div className="discount-controls">
-      <div className="field-row">
+      <div className="field-row discount-period-row">
         <span>할인기간</span>
         <div className="period-control">
           <div className="segmented">
@@ -1417,23 +1434,18 @@ function DiscountControls({
             ))}
           </div>
           <label className="inline-check"><input type="checkbox" disabled={disabled} checked={oral} onChange={(event) => onOral(event.target.checked)} /> 구두 확인</label>
-        </div>
-      </div>
-      <div className="field-row date-range-row">
-        <span>할인 기간</span>
-        <div className="date-range">
-          <input aria-label="할인 시작일" type="date" disabled={datesDisabled} value={start} onChange={(event) => onDate("discountStartDate", event.target.value)} />
-          <b>~</b>
-          <input aria-label="할인 종료일" type="date" disabled={datesDisabled} value={end} onChange={(event) => onDate("discountEndDate", event.target.value)} />
-        </div>
-      </div>
-      <div className="field-row">
-        <span>기간구분</span>
-        <div className="readonly-period">
-          <span className={normalized === "①" ? "active" : ""}>① 31일 이내</span>
-          <span className={normalized === "②" ? "active" : ""}>② 32일 이상</span>
-          {!normalized && <em>날짜 입력 시 자동 확인</em>}
-          {oral && normalized && <em>{normalized}구두확인</em>}
+          <div className={`date-range ${datesDisabled ? "range-disabled" : ""}`}>
+            <input aria-label="할인 시작일" type="date" disabled={datesDisabled} value={start} onChange={(event) => onDate("discountStartDate", event.target.value)} />
+            <b>~</b>
+            <input aria-label="할인 종료일" type="date" disabled={datesDisabled} value={end} onChange={(event) => onDate("discountEndDate", event.target.value)} />
+          </div>
+          <div className="readonly-period">
+            <strong>기간구분</strong>
+            <span className={normalized === "①" ? "active" : ""}>① 31일 이내</span>
+            <span className={normalized === "②" ? "active" : ""}>② 32일 이상</span>
+            {!normalized && <em>{mode === "모름" ? "기간 정보 없음" : "날짜 입력 시 자동 확인"}</em>}
+            {oral && normalized && <em>{normalized}구두확인</em>}
+          </div>
         </div>
       </div>
     </div>
