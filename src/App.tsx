@@ -67,6 +67,7 @@ const formatBytes = (value?: number) => {
   }
   return `${size.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
 };
+const conservativeQuota = (quota?: number) => quota ? Math.floor(Math.min(quota * 0.6, 2 * 1024 * 1024 * 1024)) : 0;
 
 function barcodeScanRegions(width: number, height: number) {
   const regions = [{ x: 0, y: 0, width, height }];
@@ -85,24 +86,40 @@ function barcodeScanRegions(width: number, height: number) {
   };
   addGrid(2, 2);
   addGrid(3, 3);
+  addGrid(4, 4, 0.22);
   regions.push(
     { x: 0, y: 0, width, height: height / 2 },
     { x: 0, y: height / 2, width, height: height / 2 },
     { x: 0, y: 0, width: width / 2, height },
     { x: width / 2, y: 0, width: width / 2, height },
+    { x: 0, y: height * 0.25, width, height: height * 0.5 },
+    { x: width * 0.25, y: 0, width: width * 0.5, height },
+    { x: width * 0.15, y: height * 0.15, width: width * 0.7, height: height * 0.7 },
   );
   return regions;
 }
 
-function cropToCanvas(source: ImageBitmap, region: { x: number; y: number; width: number; height: number }) {
+function cropToCanvas(source: ImageBitmap, region: { x: number; y: number; width: number; height: number }, enhance = false) {
   const canvas = document.createElement("canvas");
-  const scale = Math.min(3, Math.max(1, 1800 / Math.max(region.width, region.height)));
+  const scale = Math.min(4, Math.max(1.2, 2200 / Math.max(region.width, region.height)));
   canvas.width = Math.round(region.width * scale);
   canvas.height = Math.round(region.height * scale);
   const context = canvas.getContext("2d");
   if (!context) return undefined;
   context.imageSmoothingEnabled = false;
   context.drawImage(source, region.x, region.y, region.width, region.height, 0, 0, canvas.width, canvas.height);
+  if (enhance) {
+    const image = context.getImageData(0, 0, canvas.width, canvas.height);
+    const data = image.data;
+    for (let index = 0; index < data.length; index += 4) {
+      const gray = data[index] * 0.299 + data[index + 1] * 0.587 + data[index + 2] * 0.114;
+      const boosted = gray > 150 ? 255 : gray < 95 ? 0 : gray;
+      data[index] = boosted;
+      data[index + 1] = boosted;
+      data[index + 2] = boosted;
+    }
+    context.putImageData(image, 0, 0);
+  }
   return canvas;
 }
 
@@ -114,12 +131,18 @@ async function detectBarcodeFromFile(file: File) {
     const detector = new detectorClass({ formats: barcodeFormats });
     const values = new Set<string>();
     for (const region of barcodeScanRegions(bitmap.width, bitmap.height)) {
-      const source = region.x === 0 && region.y === 0 && region.width === bitmap.width && region.height === bitmap.height
-        ? bitmap
-        : cropToCanvas(bitmap, region);
-      if (!source) continue;
-      const results = await detector.detect(source);
-      results.map((result) => result.rawValue).filter(Boolean).forEach((value) => values.add(value));
+      const sources: ImageBitmapSource[] = [];
+      const isFull = region.x === 0 && region.y === 0 && region.width === bitmap.width && region.height === bitmap.height;
+      if (isFull) sources.push(bitmap);
+      const cropped = cropToCanvas(bitmap, region);
+      const enhanced = cropToCanvas(bitmap, region, true);
+      if (cropped) sources.push(cropped);
+      if (enhanced) sources.push(enhanced);
+      for (const source of sources) {
+        const results = await detector.detect(source);
+        results.map((result) => result.rawValue).filter(Boolean).forEach((value) => values.add(value));
+        if (values.size > 0) break;
+      }
       if (values.size > 0) break;
       await new Promise((resolve) => window.setTimeout(resolve, 0));
     }
@@ -1001,7 +1024,8 @@ function PhotoPreview({ photo, className = "" }: { photo?: SurveyPhoto; classNam
 function StorageModal({ estimate, photoCount, onRefresh, onClose }: { estimate?: StorageEstimate; photoCount: number; onRefresh: () => void; onClose: () => void }) {
   const used = estimate?.usage ?? 0;
   const quota = estimate?.quota ?? 0;
-  const percent = quota ? Math.min(100, Math.round((used / quota) * 100)) : 0;
+  const safeQuota = conservativeQuota(quota);
+  const percent = safeQuota ? Math.min(100, Math.round((used / safeQuota) * 100)) : 0;
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true">
       <section className="modal">
@@ -1013,12 +1037,12 @@ function StorageModal({ estimate, photoCount, onRefresh, onClose }: { estimate?:
           <button className="icon-button" onClick={onClose} aria-label="닫기"><X size={18} /></button>
         </div>
         <div className="storage-meter">
+          <div><strong>{photoCount.toLocaleString()}장</strong><span>저장 중인 사진 수</span></div>
           <div><strong>{formatBytes(used)}</strong><span>사용 중</span></div>
-          <div><strong>{formatBytes(quota)}</strong><span>예상 한도</span></div>
-          <div><strong>{photoCount.toLocaleString()}장</strong><span>현재 지역 사진</span></div>
+          <div><strong>{formatBytes(safeQuota)}</strong><span>보수적 예상 한도</span></div>
         </div>
         <div className="progress-line storage-progress"><span style={{ width: `${percent}%` }} /></div>
-        <p className="small-help">기기와 브라우저 정책에 따라 실제 저장 가능 용량은 달라질 수 있습니다. 조사 중에는 지역별 백업을 자주 내려받아 주세요.</p>
+        <p className="small-help">브라우저가 알려주는 한도보다 낮게 잡아 표시합니다. 실제 저장 가능 용량은 기기와 브라우저 정책에 따라 달라질 수 있으니 조사 중에는 지역별 백업을 자주 내려받아 주세요.</p>
         <button onClick={onRefresh}>다시 확인</button>
       </section>
     </div>
