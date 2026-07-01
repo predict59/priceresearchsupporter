@@ -1000,8 +1000,29 @@ textarea { min-height: 110px; resize: vertical; }
   gap: 8px;
   margin: -4px 0 18px;
 }
+.store-state-actions button {
+  min-width: 0;
+  padding-inline: 8px;
+}
 .store-photo-heading {
   margin-top: 16px;
+}
+.store-date-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.store-date-row span {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+.store-date-row input {
+  width: 100%;
+  min-width: 0;
 }
 .meta-label {
   color: #64748b;
@@ -1065,6 +1086,14 @@ textarea { min-height: 110px; resize: vertical; }
   color: #64748b;
   font-size: 13px;
   font-weight: 900;
+}
+.field-note {
+  display: block;
+  margin-top: 3px;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.25;
 }
 .disabled-block {
   opacity: .58;
@@ -1280,6 +1309,11 @@ textarea { min-height: 110px; resize: vertical; }
   font-size: 13px;
   background: #fff;
 }
+.memo-chips button.active {
+  background: #0f766e;
+  border-color: #0f766e;
+  color: #fff;
+}
 .memo-block textarea {
   background: #fff;
 }
@@ -1397,22 +1431,6 @@ textarea { min-height: 110px; resize: vertical; }
   background: #fef2f2;
   color: #991b1b;
   border-color: #fecaca;
-}
-.app-exit-toast {
-  position: fixed;
-  left: 50%;
-  bottom: 86px;
-  transform: translateX(-50%);
-  z-index: 80;
-  width: max-content;
-  max-width: calc(100vw - 32px);
-  border-radius: 999px;
-  background: rgba(15, 23, 42, .92);
-  color: #fff;
-  padding: 11px 16px;
-  font-size: 14px;
-  font-weight: 900;
-  box-shadow: 0 14px 30px rgba(15, 23, 42, .18);
 }
 .sticky-lite { width: 100%; min-height: 56px; }
 .row-button { width: 100%; justify-content: flex-start; margin-bottom: 6px; }

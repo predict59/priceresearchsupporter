@@ -84,6 +84,10 @@ export async function getPhotosByRegion(region: string) {
   return (await (await dbPromise).getAllFromIndex("photos", "region", region)) as SurveyPhoto[];
 }
 
+export async function getPhotos() {
+  return (await (await dbPromise).getAll("photos")) as SurveyPhoto[];
+}
+
 export async function getPhotosByStore(storeId: string) {
   return (await (await dbPromise).getAllFromIndex("photos", "storeId", storeId)) as SurveyPhoto[];
 }
@@ -113,6 +117,21 @@ export async function importRegionData(region: string, stores: SurveyStore[], it
     ...items.map((item) => tx.objectStore("items").put(item)),
     ...photos.map((photo) => tx.objectStore("photos").put(photo)),
   ]);
+  await tx.done;
+}
+
+export async function importAllData(regions: Region[], stores: SurveyStore[], items: SurveyItem[], photos: SurveyPhoto[], settings: AppSettings) {
+  const db = await dbPromise;
+  const names = ["surveyFiles", "regions", "stores", "items", "photos", "settings"];
+  const tx = db.transaction(names, "readwrite");
+  await Promise.all(names.map((name) => tx.objectStore(name).clear()));
+  await Promise.all([
+    ...regions.map((region) => tx.objectStore("regions").put(region)),
+    ...stores.map((store) => tx.objectStore("stores").put(store)),
+    ...items.map((item) => tx.objectStore("items").put(item)),
+    ...photos.map((photo) => tx.objectStore("photos").put(photo)),
+  ]);
+  await tx.objectStore("settings").put({ id: "app", value: settings });
   await tx.done;
 }
 

@@ -1,7 +1,7 @@
 import { Camera, CheckCircle2, ChevronDown, ChevronUp, Download, MapPin, Menu, MoreVertical, Phone, SlidersHorizontal, Search, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
-import { clearAllData, deletePhoto, getItems, getPhotosByRegion, getPhotosByStore, getRegions, getSettings, getStores, importRegionData, now, putItem, putPhoto, putStore, saveParsedData, saveSettings, today, uid } from "./db";
+import { clearAllData, deletePhoto, getItems, getPhotos, getPhotosByRegion, getPhotosByStore, getRegions, getSettings, getStores, importAllData, importRegionData, now, putItem, putPhoto, putStore, saveParsedData, saveSettings, today, uid } from "./db";
 import { parseContactRows, parseSurveyWorkbook, mergeContacts, rebuildStoresAndRegions } from "./excel";
 import { dataUrlToBlob, exportBackup, exportRegionExcel, exportRegionZip } from "./exporters";
 import { mapSearchAddress, requiredPhotoLabels, summarize } from "./logic";
@@ -216,12 +216,7 @@ function App() {
   const [storageEstimate, setStorageEstimate] = useState<StorageEstimate | undefined>();
   const [photosReady, setPhotosReady] = useState(false);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
-  const [exitMessage, setExitMessage] = useState("");
   const confirmResolver = useRef<((value: boolean) => void) | null>(null);
-  const canGoBackRef = useRef(false);
-  const goBackRef = useRef<() => void>(() => undefined);
-  const exitArmedUntilRef = useRef(0);
-  const allowBrowserBackRef = useRef(false);
 
   const currentRegion = settings.currentRegion;
   const regionItems = useMemo(() => items.filter((item) => item.region === currentRegion), [items, currentRegion]);
@@ -483,15 +478,20 @@ function App() {
     if (selectedStore.frontPhotoId) await deletePhoto(selectedStore.frontPhotoId);
     const resized = await resizePhoto(file);
     const photo: SurveyPhoto = { id: uid("photo"), region: selectedStore.region, storeId: selectedStore.id, type: "STORE_FRONT", blob: resized.blob, originalName: file.name, mimeType: resized.mimeType, takenAt: now() };
+    const nextStore = { ...selectedStore, frontPhotoId: photo.id, operatingStatus: selectedStore.operatingStatus ?? "영업 중", status: "진행중" as const, startedAt: selectedStore.startedAt ?? now(), updatedAt: now() };
     await putPhoto(photo);
-    await putStore({ ...selectedStore, frontPhotoId: photo.id, status: "진행중", startedAt: selectedStore.startedAt ?? now(), updatedAt: now() });
+    await putStore(nextStore);
+    if (nextStore.operatingStatus === "폐업" || nextStore.operatingStatus === "임시휴업") {
+      await applyStoreStatusToItems(nextStore, nextStore.operatingStatus);
+      return;
+    }
     await refresh(selectedStore.region);
   }
 
   async function removeStorePhoto() {
     if (!selectedStore?.frontPhotoId) return;
     await deletePhoto(selectedStore.frontPhotoId);
-    await putStore({ ...selectedStore, frontPhotoId: undefined, updatedAt: now() });
+    await putStore({ ...selectedStore, frontPhotoId: undefined, operatingStatus: undefined, updatedAt: now() });
     await refresh(selectedStore.region);
   }
 
@@ -516,19 +516,47 @@ function App() {
     return true;
   }
 
+  async function setStoreOperatingStatus(status: StoreOperatingStatus | "") {
+    if (!selectedStore) return;
+    if (!status) {
+      await putStore({ ...selectedStore, operatingStatus: undefined, updatedAt: now() });
+      await refresh(selectedStore.region);
+      return;
+    }
+    if (!selectedStore.frontPhotoId) {
+      await putStore({ ...selectedStore, operatingStatus: status, updatedAt: now() });
+      await refresh(selectedStore.region);
+      return;
+    }
+    if (status === "폐업" || status === "임시휴업") {
+      await applyStoreOperatingStatus(status);
+      return;
+    }
+    await putStore({ ...selectedStore, operatingStatus: status, updatedAt: now() });
+    await refresh(selectedStore.region);
+  }
+
   async function applyStoreOperatingStatus(status: Exclude<StoreOperatingStatus, "영업 중">) {
     if (!selectedStore) return;
+    await applyStoreStatusToItems(selectedStore, status);
+  }
+
+  async function applyStoreStatusToItems(store: SurveyStore, status: Exclude<StoreOperatingStatus, "영업 중">) {
     const memoText = status === "폐업" ? "판매처 폐점" : "임시휴업";
     const ok = await askConfirm({
       title: `${status} 처리할까요?`,
-      message: `${selectedStore.storeName} 하위 모든 품목을 일괄 변경합니다.\n\n이미 입력한 가격정보가 있어도 일괄로 데이터가 바뀝니다.`,
+      message: `${store.storeName} 하위 모든 품목을 일괄 변경합니다.\n\n이미 입력한 가격정보가 있어도 일괄로 데이터가 바뀝니다.`,
       confirmText: `${status} 처리`,
       cancelText: "취소",
       danger: true,
     });
     if (!ok) return;
-    const surveyDate = selectedStore.surveyDate || today();
-    const changedItems = storeItems.map((item) => ({
+    const storePhotos = store.id === selectedStore?.id ? photos : await getPhotosByStore(store.id);
+    const removablePhotos = storePhotos.filter((photo) => photo.storeId === store.id && photo.type !== "STORE_FRONT");
+    await Promise.all(removablePhotos.map((photo) => deletePhoto(photo.id)));
+    const ownItems = store.id === selectedStore?.id ? storeItems : items.filter((item) => item.storeId === store.id);
+    const surveyDate = store.surveyDate || today();
+    const changedItems = ownItems.map((item) => ({
       ...item,
       surveyDate,
       normalDisplay: "X" as const,
@@ -550,9 +578,9 @@ function App() {
       status: "완료" as const,
       updatedAt: now(),
     }));
-    await putStore({ ...selectedStore, operatingStatus: status, status: "완료", updatedAt: now() });
+    await putStore({ ...store, operatingStatus: status, status: "완료", updatedAt: now() });
     await Promise.all(changedItems.map(putItem));
-    await refresh(selectedStore.region);
+    await refresh(store.region);
   }
 
   async function doExportExcel(region = currentRegion) {
@@ -568,19 +596,29 @@ function App() {
     await exportRegionZip(region, regionStoresForExport, regionItemsForExport, regionPhotos);
   }
 
-  async function doBackup(region = currentRegion) {
-    const sourceStores = region ? stores.filter((store) => store.region === region) : stores;
-    const sourceItems = region ? items.filter((item) => item.region === region) : items;
-    const sourcePhotos = region ? (region === currentRegion ? photos : await getPhotosByRegion(region)) : photos;
-    await exportBackup(region, sourceStores, sourceItems, sourcePhotos, settings);
+  async function doBackup(region = currentRegion, all = false) {
+    const scopeRegion = all ? undefined : region;
+    const sourceStores = scopeRegion ? stores.filter((store) => store.region === scopeRegion) : stores;
+    const sourceItems = scopeRegion ? items.filter((item) => item.region === scopeRegion) : items;
+    const sourcePhotos = scopeRegion ? (scopeRegion === currentRegion ? photos : await getPhotosByRegion(scopeRegion)) : await getPhotos();
+    const sourceRegions = scopeRegion ? regions.filter((candidate) => candidate.name === scopeRegion) : regions;
+    await exportBackup(scopeRegion, sourceRegions, sourceStores, sourceItems, sourcePhotos, settings);
   }
 
   async function restoreBackup(file: File) {
     const payload = JSON.parse(await file.text()) as BackupPayload;
+    const restoredPhotos = await Promise.all(payload.photos.map(async ({ dataUrl, ...photo }) => ({ ...photo, blob: await dataUrlToBlob(dataUrl) })));
+    if (payload.scope === "all") {
+      if (!confirm("현재 기기의 모든 자료와 입력값, 사진을 백업 파일 내용으로 덮어씁니다. 계속할까요?")) return;
+      const nextSettings = { ...payload.settings, currentRegion: payload.settings.currentRegion ?? payload.regions[0]?.name };
+      await importAllData(payload.regions, payload.stores, payload.items, restoredPhotos, nextSettings);
+      await refresh(nextSettings.currentRegion);
+      setView("regions");
+      return;
+    }
     const region = payload.region ?? payload.regions[0]?.name;
     if (!region) return;
     if (!confirm(`${region} 지역 데이터를 백업 파일 내용으로 덮어씁니다. 계속할까요?`)) return;
-    const restoredPhotos = await Promise.all(payload.photos.map(async ({ dataUrl, ...photo }) => ({ ...photo, blob: await dataUrlToBlob(dataUrl) })));
     await importRegionData(region, payload.stores, payload.items, restoredPhotos);
     await updateSettings({ currentRegion: region });
     await refresh(region);
@@ -636,54 +674,6 @@ function App() {
       setView("upload");
     }
   };
-  useEffect(() => {
-    canGoBackRef.current = canGoBack;
-    goBackRef.current = goBack;
-  }, [canGoBack, view, currentRegion, regions.length]);
-
-  useEffect(() => {
-    const armBackGuard = () => {
-      if (allowBrowserBackRef.current) return;
-      if (history.state?.appGuard) {
-        history.replaceState({ appGuard: true, appView: view }, "", location.href);
-        return;
-      }
-      history.replaceState({ appRoot: true }, "", location.href);
-      history.pushState({ appGuard: true, appView: view }, "", location.href);
-    };
-    armBackGuard();
-    window.setTimeout(armBackGuard, 250);
-    const onPopState = () => {
-      if (allowBrowserBackRef.current) return;
-      if (canGoBackRef.current) {
-        goBackRef.current();
-        history.pushState({ appGuard: true, appView: view }, "", location.href);
-        return;
-      }
-      const nowMs = Date.now();
-      if (exitArmedUntilRef.current > nowMs) {
-        allowBrowserBackRef.current = true;
-        history.back();
-        return;
-      }
-      exitArmedUntilRef.current = nowMs + 2200;
-      setExitMessage("한 번 더 뒤로가기를 누르면 종료됩니다.");
-      window.setTimeout(() => setExitMessage(""), 2200);
-      history.pushState({ appGuard: true, appView: view }, "", location.href);
-    };
-    const onPageShow = () => armBackGuard();
-    const onFirstInteraction = () => armBackGuard();
-    window.addEventListener("popstate", onPopState);
-    window.addEventListener("pageshow", onPageShow);
-    window.addEventListener("pointerdown", onFirstInteraction, { once: true });
-    window.addEventListener("touchstart", onFirstInteraction, { once: true });
-    return () => {
-      window.removeEventListener("popstate", onPopState);
-      window.removeEventListener("pageshow", onPageShow);
-      window.removeEventListener("pointerdown", onFirstInteraction);
-      window.removeEventListener("touchstart", onFirstInteraction);
-    };
-  }, [view]);
   const screenTitle =
     view === "regions" ? "메인"
     : view === "workspace" ? "마트리스트"
@@ -871,11 +861,18 @@ function App() {
             <h1>{selectedStore.storeName}</h1>
             <div className="store-operating">
               <span>현재상태</span>
-              <strong className={`operating-badge ${selectedStore.frontPhotoId ? operatingClass(selectedStore.operatingStatus) : "unknown"}`}>{storeDisplayStatus(selectedStore)}</strong>
+              <strong className={`operating-badge ${selectedStore.operatingStatus ? operatingClass(selectedStore.operatingStatus) : "unknown"}`}>{storeDisplayStatus(selectedStore)}</strong>
             </div>
             <div className="store-state-actions">
-              <button type="button" className="danger-light" onClick={() => applyStoreOperatingStatus("폐업")}>폐업 처리</button>
-              <button type="button" className="warning-light" onClick={() => applyStoreOperatingStatus("임시휴업")}>임시휴업 처리</button>
+              {[
+                ["", "미확인"],
+                ["영업 중", "영업 중"],
+                ["폐업", "폐업"],
+                ["임시휴업", "임시휴업"],
+              ].map(([value, label]) => {
+                const active = value ? selectedStore.operatingStatus === value : !selectedStore.operatingStatus;
+                return <button key={label} type="button" className={active ? "primary" : ""} onClick={() => setStoreOperatingStatus(value as StoreOperatingStatus | "")}>{label}</button>;
+              })}
             </div>
             <div className="store-address"><span>주소</span><strong>{selectedStore.storeAddress || "-"}</strong></div>
             <div className="store-address store-photo-heading"><span>마트 전경사진</span></div>
@@ -895,7 +892,7 @@ function App() {
           <Contacts items={storeItems} />
           <section className="panel">
             <p>조사 품목: {storeItems.length.toLocaleString()}건</p>
-            <label>방문 조사일<input type="date" value={selectedStore.surveyDate} onChange={async (event) => { await putStore({ ...selectedStore, surveyDate: event.target.value, updatedAt: now() }); await refresh(selectedStore.region); }} /></label>
+            <label className="store-date-row"><span>방문 조사일</span><input type="date" value={selectedStore.surveyDate} onChange={async (event) => { await putStore({ ...selectedStore, surveyDate: event.target.value, updatedAt: now() }); await refresh(selectedStore.region); }} /></label>
             <button className="primary sticky-lite" onClick={() => selectedStore.frontPhotoId ? (setItemQuery(""), setView("items")) : alert("마트 전경사진을 먼저 촬영/선택해 주세요.")}>조사 입력</button>
           </section>
         </main>
@@ -958,7 +955,7 @@ function App() {
             <article className="panel">
               <h2>백업 내려받기</h2>
               <p className="muted">현재 브라우저에 저장된 조사 데이터와 사진을 JSON으로 저장합니다.</p>
-              <button className="primary full-button" onClick={() => doBackup(undefined)}><Download size={17} />전체 백업 다운로드</button>
+              <button className="primary full-button" onClick={() => doBackup(undefined, true)}><Download size={17} />전체 백업 다운로드</button>
             </article>
             <article className="panel">
               <h2>백업 업로드</h2>
@@ -1042,7 +1039,6 @@ function App() {
           onClose={() => setSummaryOpen(false)}
         />
       )}
-      {exitMessage && <div className="app-exit-toast">{exitMessage}</div>}
     </div>
   );
 }
@@ -1181,8 +1177,7 @@ function operatingClass(status?: StoreOperatingStatus) {
 }
 
 function storeDisplayStatus(store: SurveyStore) {
-  if (store.operatingStatus === "폐업" || store.operatingStatus === "임시휴업") return store.operatingStatus;
-  return store.frontPhotoId ? "영업 중" : "미확인";
+  return store.operatingStatus ?? "미확인";
 }
 
 function StoreCard({
@@ -1463,6 +1458,43 @@ function ItemEditor({ item, storeItems, photos, onSave, onSaved, onList, onStore
     if (parts.includes(text)) return draft.memo;
     return parts.length ? `${parts.join(" / ")} / ${text}` : text;
   };
+  const toggleMemo = (text: string) => {
+    const parts = draft.memo.split("/").map((part) => part.trim()).filter(Boolean);
+    return parts.includes(text) ? parts.filter((part) => part !== text).join(" / ") : appendMemoText(draft.memo, text);
+  };
+  const removeLocalPhotoTypes = (types: PhotoType[]) => {
+    const removing = localPhotos.filter((photo) => photo.itemId === draft.id && types.includes(photo.type));
+    if (removing.length === 0) return;
+    setDeletedPhotoIds((old) => [...old, ...removing.filter((photo) => !photo.id.startsWith("temp_")).map((photo) => photo.id)]);
+    setLocalPhotos((old) => old.filter((photo) => !(photo.itemId === draft.id && types.includes(photo.type))));
+  };
+  const updateNormalDisplay = async (value: string) => {
+    const nextValue = value as SurveyItem["normalDisplay"];
+    const removeTypes = nextValue === "X" ? ["PRODUCT_DISPLAY", "PRODUCT_INFO_BARCODE"] as PhotoType[] : nextValue === "O" ? ["POS_RECEIPT"] as PhotoType[] : [];
+    const removing = localPhotos.filter((photo) => photo.itemId === draft.id && removeTypes.includes(photo.type));
+    if (removing.length > 0) {
+      const ok = await askConfirm({
+        title: "사진을 정리할까요?",
+        message: `진열여부를 변경하면 현재 선택한 상태에 맞지 않는 사진 ${removing.length}장이 삭제됩니다. 계속할까요?`,
+        confirmText: "삭제 후 변경",
+        cancelText: "취소",
+        danger: true,
+      });
+      if (!ok) return;
+      removeLocalPhotoTypes(removeTypes);
+    }
+    update({
+      normalDisplay: nextValue,
+      photoCase: nextValue === "X" ? "POS_ONLY" : nextValue === "O" ? "NORMAL" : "",
+      specMatch: nextValue === "X" ? "" : draft.specMatch,
+      barcodeMatch: nextValue === "X" ? "" : draft.barcodeMatch,
+      barcodeRegistered: nextValue === "O" ? "" : draft.barcodeRegistered,
+      abnormalStatus: nextValue === "O" ? "" : draft.abnormalStatus,
+      posChecked: nextValue === "O" ? "" : draft.posChecked,
+      posPrice: null,
+      abnormalDisplay: nextValue === "X" ? "" : draft.abnormalDisplay,
+    });
+  };
   const cleanDiscountMemo = () => removeMemoTexts(draft.memo, ["상시할인", "할인 정보 확인 불가"]);
   const updatePosChecked = (value: string) => {
     update({
@@ -1589,7 +1621,7 @@ function ItemEditor({ item, storeItems, photos, onSave, onSaved, onList, onStore
   return <main className="page item-page"><section className="item-hero"><div className="item-hero-row"><span className="item-code">{draft.itemNo}</span><strong className="item-hero-name" title={draft.productName}>{draft.productName}</strong><Badge text={draft.status} /></div></section>
     <ItemContact item={draft} />
     <details className="panel" open><summary>① 국군복지단 제시정보</summary><Info item={draft} /></details>
-    <section className="panel"><h2>② 실물 확인</h2><Choice label="정상진열" value={draft.normalDisplay} values={["O", "X"]} onChange={(value) => update({ normalDisplay: value as SurveyItem["normalDisplay"], photoCase: value === "X" ? "POS_ONLY" : value === "O" ? "NORMAL" : "", specMatch: value === "X" ? "" : draft.specMatch, barcodeMatch: value === "X" ? "" : draft.barcodeMatch, barcodeRegistered: value === "O" ? "" : draft.barcodeRegistered, abnormalStatus: value === "O" ? "" : draft.abnormalStatus, posChecked: value === "O" ? "" : draft.posChecked, posPrice: null, abnormalDisplay: value === "X" ? "" : draft.abnormalDisplay })} /><Choice label="규격일치" disabled={draft.normalDisplay !== "O"} value={draft.normalDisplay === "O" ? draft.specMatch : ""} values={["O", "X"]} onChange={(value) => update({ specMatch: value as SurveyItem["specMatch"] })} /><Choice label="바코드일치" disabled={draft.normalDisplay !== "O"} value={draft.normalDisplay === "O" ? draft.barcodeMatch : ""} values={["O", "X"]} onChange={(value) => update({ barcodeMatch: value as SurveyItem["barcodeMatch"] })} /></section>
+    <section className="panel"><h2>② 실물 확인</h2><Choice label="진열여부" note="*조사표에는 정상진열로 표기" value={draft.normalDisplay} values={["O", "X"]} onChange={updateNormalDisplay} /><Choice label="규격일치" disabled={draft.normalDisplay !== "O"} value={draft.normalDisplay === "O" ? draft.specMatch : ""} values={["O", "X"]} onChange={(value) => update({ specMatch: value as SurveyItem["specMatch"] })} /><Choice label="바코드일치" disabled={draft.normalDisplay !== "O"} value={draft.normalDisplay === "O" ? draft.barcodeMatch : ""} values={["O", "X"]} onChange={(value) => update({ barcodeMatch: value as SurveyItem["barcodeMatch"] })} /></section>
     <section className={`panel ${draft.normalDisplay === "X" ? "" : "disabled-block"}`}><h2>③ 상태 <small className="section-note">(정상진열 X 시 입력)</small></h2><Choice label="바코드 등록 여부" disabled={draft.normalDisplay !== "X"} value={draft.normalDisplay === "X" ? draft.barcodeRegistered : ""} values={["O", "X"]} onChange={(value) => update({ barcodeRegistered: value as SurveyItem["barcodeRegistered"] })} /><Choice label="판매여부" disabled={draft.normalDisplay !== "X"} value={draft.normalDisplay === "X" ? draft.abnormalStatus : ""} values={["미진열", "미판매"]} onChange={(value) => update({ abnormalStatus: value as SurveyItem["abnormalStatus"] })} /><Choice label="POS 조회 여부" disabled={draft.normalDisplay !== "X"} value={draft.normalDisplay === "X" ? draft.posChecked : ""} values={["조회함", "조회불가"]} onChange={updatePosChecked} /></section>
     <section className="panel"><h2 className="section-title-row">④ 사진자료 {missing.length > 0 && <span className="inline-missing">사진누락: {missing.join(", ")}</span>}</h2>{!draft.normalDisplay && <p className="notice">먼저 ② 실물 확인에서 정상진열 O/X를 선택하면 필요한 사진 입력칸이 표시됩니다.</p>}{draft.normalDisplay === "O" && <p className="small-help barcode-help">참고: 제품정보사진 촬영 시 브라우저가 지원하면 바코드를 자동 비교합니다.</p>}{photoMessage && draft.normalDisplay === "O" && <p className="ok upload-message">{photoMessage}</p>}{draft.normalDisplay === "O" && <><PhotoSlot id="photo-product-display" label="제품진열사진" description="가격정보와 진열상품이 동시노출 되도록 촬영" photo={itemPhotos.display} onFile={(file) => upload("PRODUCT_DISPLAY", file)} onDelete={(photo) => { setDeletedPhotoIds((old) => photo.id.startsWith("temp_") ? old : [...old, photo.id]); setLocalPhotos((old) => old.filter((candidate) => candidate.id !== photo.id)); }} /><PhotoSlot id="photo-product-info" label="제품정보사진" description="상품후면 제품상세정보와 바코드 동시노출 되도록 촬영" photo={itemPhotos.info} onFile={(file) => upload("PRODUCT_INFO_BARCODE", file)} onDelete={(photo) => { setDeletedPhotoIds((old) => photo.id.startsWith("temp_") ? old : [...old, photo.id]); setLocalPhotos((old) => old.filter((candidate) => candidate.id !== photo.id)); }} /></>}{draft.normalDisplay === "X" && <PhotoSlot id="photo-pos-receipt" label="POS/영수증사진" description="제품진열사진으로 가격정보 확인불가 시 POS기 또는 영수증 촬영" photo={itemPhotos.pos} onFile={(file) => upload("POS_RECEIPT", file)} onDelete={(photo) => { setDeletedPhotoIds((old) => photo.id.startsWith("temp_") ? old : [...old, photo.id]); setLocalPhotos((old) => old.filter((candidate) => candidate.id !== photo.id)); }} />}</section>
     <section className={`panel price-panel ${priceBlocked ? "disabled-block" : ""}`}>
@@ -1618,7 +1650,7 @@ function ItemEditor({ item, storeItems, photos, onSave, onSaved, onList, onStore
         />
       </div>
     </section>
-    <section className="panel"><h2>⑥ 특이사항</h2><div className={`abnormal-block ${draft.normalDisplay === "X" ? "disabled-block" : ""}`}><Choice label="비정상진열" disabled={draft.normalDisplay === "X"} value={draft.normalDisplay === "X" ? "" : draft.abnormalDisplay ?? ""} values={["O", "X"]} onChange={(value) => update({ abnormalDisplay: value as SurveyItem["abnormalDisplay"] })} />{draft.abnormalDisplay === "O" && draft.normalDisplay !== "X" && <p className="small-help warn">비정상진열이면 어떤 위치에 어떻게 진열되어 있었는지 아래 비고에 적어주세요.</p>}</div><div className="memo-block"><h3>비고</h3><p className="small-help">자주 쓰는 문구를 누르면 비고에 추가됩니다.</p><div className="chips memo-chips">{["폐점", "품절", "재고 소진", "재입고 예정", "1+1 행사", "임시휴업", "판매처 미협조"].map((text) => <button key={text} onClick={() => update({ memo: appendMemo(text) })}>{text}</button>)}</div><textarea placeholder="예: 판매처 미협조 / 재입고 예정 / 사진 촬영 불가" value={draft.memo} onChange={(event) => update({ memo: event.target.value })} /></div></section>
+    <section className="panel"><h2>⑥ 특이사항</h2><div className={`abnormal-block ${draft.normalDisplay === "X" ? "disabled-block" : ""}`}><Choice label="비정상진열" disabled={draft.normalDisplay === "X"} value={draft.normalDisplay === "X" ? "" : draft.abnormalDisplay ?? ""} values={["O", "X"]} onChange={(value) => update({ abnormalDisplay: value as SurveyItem["abnormalDisplay"] })} />{draft.abnormalDisplay === "O" && draft.normalDisplay !== "X" && <p className="small-help warn">비정상진열이면 어떤 위치에 어떻게 진열되어 있었는지 아래 비고에 적어주세요.</p>}</div><div className="memo-block"><h3>비고</h3><p className="small-help">자주 쓰는 문구를 누르면 비고에 추가됩니다. 다시 누르면 해당 문구만 제거됩니다.</p><div className="chips memo-chips">{["가격 수기 입력", "폐점", "품절", "재고 소진", "재입고 예정", "1+1 행사", "임시휴업", "판매처 미협조"].map((text) => { const active = draft.memo.split("/").map((part) => part.trim()).includes(text); return <button key={text} className={active ? "active" : ""} onClick={() => update({ memo: toggleMemo(text) })}>{text}</button>; })}</div><textarea placeholder="예: 판매처 미협조 / 재입고 예정 / 사진 촬영 불가" value={draft.memo} onChange={(event) => update({ memo: event.target.value })} /></div></section>
     {saveMessage && <div className={`save-toast ${saveMessage.includes("실패") ? "danger-toast" : ""}`}>{saveMessage}</div>}
     <div className="item-action-fab">
       <div className="item-progress-mini"><span style={{ width: `${storeItems.length ? Math.round((storeItems.filter((candidate) => candidate.status === "완료").length + (draft.status === "완료" && !storeItems.find((candidate) => candidate.id === draft.id && candidate.status === "완료") ? 1 : 0)) / storeItems.length * 100) : 0}%` }} /></div>
@@ -1702,8 +1734,8 @@ function DiscountControls({
   );
 }
 
-function Choice({ label, value, values, disabled, onChange }: { label: string; value: string; values: string[]; disabled?: boolean; onChange: (value: string) => void }) {
-  return <div className="field-row"><span>{label}</span><div className="segmented">{values.map((candidate) => <button disabled={disabled} className={value === candidate ? "active" : ""} key={candidate} onClick={() => onChange(value === candidate ? "" : candidate)}>{candidate}</button>)}</div></div>;
+function Choice({ label, note, value, values, disabled, onChange }: { label: string; note?: string; value: string; values: string[]; disabled?: boolean; onChange: (value: string) => void | Promise<void> }) {
+  return <div className="field-row"><span>{label}{note && <small className="field-note">{note}</small>}</span><div className="segmented">{values.map((candidate) => <button disabled={disabled} className={value === candidate ? "active" : ""} key={candidate} onClick={() => onChange(value === candidate ? "" : candidate)}>{candidate}</button>)}</div></div>;
 }
 
 function Money({ label, value, disabled, onChange }: { label: string; value: number | null; disabled?: boolean; onChange: (value: string) => void }) {

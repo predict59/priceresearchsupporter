@@ -1,7 +1,7 @@
 import JSZip from "jszip";
 import * as XLSX from "xlsx";
 import { downloadBlob, safeFilePart } from "./logic";
-import type { AppSettings, BackupPayload, SurveyItem, SurveyPhoto, SurveyStore } from "./types";
+import type { AppSettings, BackupPayload, Region, SurveyItem, SurveyPhoto, SurveyStore } from "./types";
 
 const stamp = () => new Date().toISOString().slice(0, 10).replaceAll("-", "");
 const stampTime = () => new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
@@ -154,7 +154,7 @@ const blobToDataUrl = (blob: Blob) =>
     reader.readAsDataURL(blob);
   });
 
-export async function exportBackup(region: string | undefined, stores: SurveyStore[], items: SurveyItem[], photos: SurveyPhoto[], settings: AppSettings) {
+export async function exportBackup(region: string | undefined, regions: Region[], stores: SurveyStore[], items: SurveyItem[], photos: SurveyPhoto[], settings: AppSettings) {
   const photoPayload = await Promise.all(
     photos.map(async ({ blob, ...photo }) => ({
       ...photo,
@@ -166,7 +166,7 @@ export async function exportBackup(region: string | undefined, stores: SurveySto
     exportedAt: new Date().toISOString(),
     scope: region ? "region" : "all",
     region,
-    regions: Array.from(new Set(items.map((item) => item.region))).map((name) => ({ name, updatedAt: new Date().toISOString() })),
+    regions,
     stores,
     items,
     photos: photoPayload,
