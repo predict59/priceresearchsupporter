@@ -999,6 +999,16 @@ function App() {
           onClose={() => setSummaryOpen(false)}
         />
       )}
+      {summaryOpen && view === "item" && selectedStore && (
+        <SummaryModal
+          region={selectedStore.storeName}
+          stats={summarize(storeItems, photosByStore.get(selectedStore.id) ?? [])}
+          storeCount={1}
+          completedStoreCount={storeItems.length > 0 && storeItems.every((item) => item.status === "완료") ? 1 : 0}
+          mode="items"
+          onClose={() => setSummaryOpen(false)}
+        />
+      )}
       {exitMessage && <div className="app-exit-toast">{exitMessage}</div>}
     </div>
   );

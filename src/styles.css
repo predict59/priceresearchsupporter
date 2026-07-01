@@ -193,8 +193,10 @@ h2 { font-size: 18px; margin: 0 0 10px; letter-spacing: 0; }
   gap: 5px;
 }
 .badge-photo-missing {
-  background: #fff1f2;
+  background: #fee2e2;
   color: #b91c1c;
+  border: 1px solid #fca5a5;
+  font-weight: 900;
 }
 .item-card.focused {
   border-color: #0f766e;
