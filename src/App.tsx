@@ -216,6 +216,7 @@ function App() {
   const [storageEstimate, setStorageEstimate] = useState<StorageEstimate | undefined>();
   const [photosReady, setPhotosReady] = useState(false);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
+  const [storeStatusDraft, setStoreStatusDraft] = useState<StoreOperatingStatus | "">("");
   const confirmResolver = useRef<((value: boolean) => void) | null>(null);
 
   const currentRegion = settings.currentRegion;
@@ -267,6 +268,9 @@ function App() {
   const selectedStore = stores.find((store) => store.id === selectedStoreId);
   const storeItems = useMemo(() => items.filter((item) => item.storeId === selectedStoreId), [items, selectedStoreId]);
   const selectedItem = items.find((item) => item.id === selectedItemId);
+  useEffect(() => {
+    setStoreStatusDraft(selectedStore?.frontPhotoId ? selectedStore.operatingStatus ?? "" : "");
+  }, [selectedStore?.id, selectedStore?.frontPhotoId, selectedStore?.operatingStatus]);
   const stats = useMemo(() => summarize(regionItems, photos), [regionItems, photos]);
 
   function askConfirm(options: ConfirmState) {
@@ -478,13 +482,9 @@ function App() {
     if (selectedStore.frontPhotoId) await deletePhoto(selectedStore.frontPhotoId);
     const resized = await resizePhoto(file);
     const photo: SurveyPhoto = { id: uid("photo"), region: selectedStore.region, storeId: selectedStore.id, type: "STORE_FRONT", blob: resized.blob, originalName: file.name, mimeType: resized.mimeType, takenAt: now() };
-    const nextStore = { ...selectedStore, frontPhotoId: photo.id, operatingStatus: selectedStore.operatingStatus ?? "영업 중", status: "진행중" as const, startedAt: selectedStore.startedAt ?? now(), updatedAt: now() };
+    const nextStore = { ...selectedStore, frontPhotoId: photo.id, operatingStatus: selectedStore.frontPhotoId ? selectedStore.operatingStatus : undefined, status: "진행중" as const, startedAt: selectedStore.startedAt ?? now(), updatedAt: now() };
     await putPhoto(photo);
     await putStore(nextStore);
-    if (nextStore.operatingStatus === "폐업" || nextStore.operatingStatus === "임시휴업") {
-      await applyStoreStatusToItems(nextStore, nextStore.operatingStatus);
-      return;
-    }
     await refresh(selectedStore.region);
   }
 
@@ -518,14 +518,24 @@ function App() {
 
   async function setStoreOperatingStatus(status: StoreOperatingStatus | "") {
     if (!selectedStore) return;
+    if (!selectedStore.frontPhotoId) {
+      await askConfirm({
+        title: "마트 전경사진이 필요합니다",
+        message: "마트 상태는 전경사진을 먼저 등록한 뒤 전환할 수 있습니다.",
+        confirmText: "확인",
+        cancelText: "닫기",
+      });
+      setStoreStatusDraft("");
+      return;
+    }
     if (!status) {
       await putStore({ ...selectedStore, operatingStatus: undefined, updatedAt: now() });
       await refresh(selectedStore.region);
       return;
     }
-    if (!selectedStore.frontPhotoId) {
-      await putStore({ ...selectedStore, operatingStatus: status, updatedAt: now() });
-      await refresh(selectedStore.region);
+    if (status === selectedStore.operatingStatus) return;
+    if (status === "영업 중" && (selectedStore.operatingStatus === "폐업" || selectedStore.operatingStatus === "임시휴업")) {
+      await resetStoreItemsForOpen(selectedStore);
       return;
     }
     if (status === "폐업" || status === "임시휴업") {
@@ -580,6 +590,48 @@ function App() {
     }));
     await putStore({ ...store, operatingStatus: status, status: "완료", updatedAt: now() });
     await Promise.all(changedItems.map(putItem));
+    await refresh(store.region);
+  }
+
+  async function resetStoreItemsForOpen(store: SurveyStore) {
+    const ok = await askConfirm({
+      title: "영업 중으로 전환할까요?",
+      message: `${store.storeName} 하위 품목의 가격정보와 품목 사진이 초기화됩니다.\n\n처음부터 다시 입력해야 합니다.`,
+      confirmText: "전환",
+      cancelText: "취소",
+      danger: true,
+    });
+    if (!ok) return;
+    const storePhotos = store.id === selectedStore?.id ? photos : await getPhotosByStore(store.id);
+    const removablePhotos = storePhotos.filter((photo) => photo.storeId === store.id && photo.type !== "STORE_FRONT");
+    await Promise.all(removablePhotos.map((photo) => deletePhoto(photo.id)));
+    const ownItems = store.id === selectedStore?.id ? storeItems : items.filter((item) => item.storeId === store.id);
+    const resetItems = ownItems.map((item) => ({
+      ...item,
+      surveyDate: "",
+      normalDisplay: "" as const,
+      specMatch: "" as const,
+      barcodeMatch: "" as const,
+      normalPrice: null,
+      hasDiscount: null,
+      discountPrice: null,
+      discountStartDate: "",
+      discountEndDate: "",
+      discountType: "",
+      discountOral: false,
+      discountPeriodMode: "" as const,
+      barcodeRegistered: "" as const,
+      abnormalStatus: "" as const,
+      posChecked: "" as const,
+      posPrice: null,
+      abnormalDisplay: "" as const,
+      photoCase: "" as const,
+      memo: "",
+      status: "미조사" as const,
+      updatedAt: now(),
+    }));
+    await putStore({ ...store, operatingStatus: "영업 중", status: "진행중", completedAt: undefined, updatedAt: now() });
+    await Promise.all(resetItems.map(putItem));
     await refresh(store.region);
   }
 
@@ -861,25 +913,14 @@ function App() {
             <h1>{selectedStore.storeName}</h1>
             <div className="store-operating">
               <span>현재상태</span>
-              <strong className={`operating-badge ${selectedStore.operatingStatus ? operatingClass(selectedStore.operatingStatus) : "unknown"}`}>{storeDisplayStatus(selectedStore)}</strong>
-            </div>
-            <div className="store-state-actions">
-              {[
-                ["", "미확인"],
-                ["영업 중", "영업 중"],
-                ["폐업", "폐업"],
-                ["임시휴업", "임시휴업"],
-              ].map(([value, label]) => {
-                const active = value ? selectedStore.operatingStatus === value : !selectedStore.operatingStatus;
-                return <button key={label} type="button" className={active ? "primary" : ""} onClick={() => setStoreOperatingStatus(value as StoreOperatingStatus | "")}>{label}</button>;
-              })}
+              <strong className={`operating-badge ${selectedStore.frontPhotoId && selectedStore.operatingStatus ? operatingClass(selectedStore.operatingStatus) : "unknown"}`}>{storeDisplayStatus(selectedStore)}</strong>
             </div>
             <div className="store-address"><span>주소</span><strong>{selectedStore.storeAddress || "-"}</strong></div>
             <div className="store-address store-photo-heading"><span>마트 전경사진</span></div>
             {(() => {
               const frontPhoto = photos.find((photo) => photo.id === selectedStore.frontPhotoId);
               return (
-            <div className={`photo-slot ${selectedStore.frontPhotoId ? "uploaded" : ""}`}>
+            <div className={`photo-slot store-front-slot ${selectedStore.frontPhotoId ? "uploaded" : ""}`}>
               {frontPhoto && <PhotoPreview photo={frontPhoto} className="wide-preview" />}
               <div className="photo-actions">
                 {!selectedStore.frontPhotoId && <PhotoInput label="촬영/첨부" onFile={saveStorePhoto} />}
@@ -888,6 +929,15 @@ function App() {
             </div>
               );
             })()}
+            <div className="store-state-actions">
+              <select disabled={!selectedStore.frontPhotoId} value={selectedStore.frontPhotoId ? storeStatusDraft : ""} onChange={(event) => setStoreStatusDraft(event.target.value as StoreOperatingStatus | "")}>
+                <option value="">미확인</option>
+                <option value="영업 중">영업 중</option>
+                <option value="폐업">폐업</option>
+                <option value="임시휴업">임시휴업</option>
+              </select>
+              <button type="button" className="primary" disabled={!selectedStore.frontPhotoId} onClick={() => setStoreOperatingStatus(storeStatusDraft)}>전환</button>
+            </div>
           </section>
           <Contacts items={storeItems} />
           <section className="panel">
@@ -1177,7 +1227,7 @@ function operatingClass(status?: StoreOperatingStatus) {
 }
 
 function storeDisplayStatus(store: SurveyStore) {
-  return store.operatingStatus ?? "미확인";
+  return store.frontPhotoId ? store.operatingStatus ?? "미확인" : "미확인";
 }
 
 function StoreCard({

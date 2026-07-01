@@ -996,16 +996,37 @@ textarea { min-height: 110px; resize: vertical; }
 }
 .store-state-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
-  margin: -4px 0 18px;
+  margin: 12px 0 0;
+  align-items: center;
+}
+.store-state-actions select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
 }
 .store-state-actions button {
   min-width: 0;
-  padding-inline: 8px;
+  min-height: 44px;
+  padding-inline: 14px;
 }
 .store-photo-heading {
   margin-top: 16px;
+}
+.store-front-slot {
+  padding: 10px;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.store-front-slot .wide-preview {
+  max-height: 150px;
+}
+.store-front-slot .photo-button {
+  min-height: 42px;
+}
+.store-front-slot .photo-actions {
+  gap: 6px;
 }
 .store-date-row {
   display: grid;
