@@ -545,8 +545,13 @@ function App() {
   }, [canGoBack, view, currentRegion, regions.length]);
 
   useEffect(() => {
-    history.replaceState({ appRoot: true }, "", location.href);
-    history.pushState({ appGuard: true }, "", location.href);
+    const armBackGuard = () => {
+      if (allowBrowserBackRef.current || history.state?.appGuard) return;
+      history.replaceState({ appRoot: true }, "", location.href);
+      history.pushState({ appGuard: true }, "", location.href);
+    };
+    armBackGuard();
+    window.setTimeout(armBackGuard, 250);
     const onPopState = () => {
       if (allowBrowserBackRef.current) return;
       if (canGoBackRef.current) {
@@ -565,8 +570,18 @@ function App() {
       window.setTimeout(() => setExitMessage(""), 2200);
       history.pushState({ appGuard: true }, "", location.href);
     };
+    const onPageShow = () => armBackGuard();
+    const onFirstInteraction = () => armBackGuard();
     window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
+    window.addEventListener("pageshow", onPageShow);
+    window.addEventListener("pointerdown", onFirstInteraction, { once: true });
+    window.addEventListener("touchstart", onFirstInteraction, { once: true });
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+      window.removeEventListener("pageshow", onPageShow);
+      window.removeEventListener("pointerdown", onFirstInteraction);
+      window.removeEventListener("touchstart", onFirstInteraction);
+    };
   }, []);
   const screenTitle =
     view === "regions" ? "지역리스트"
@@ -620,7 +635,7 @@ function App() {
           <section className="upload-hero">
             <span>초기 설정</span>
             <h1>조사자료 업로드</h1>
-            <p>최초 1회 조사표와 업체 연락처를 올리면 지역, 업체, 품목 목록이 이 기기에 저장됩니다. 이후에는 현장에서 오프라인으로 입력할 수 있어요.</p>
+            <p>조사표와 업체 연락처 엑셀 파일을 입력하면 해당 자료를 기반으로 지역, 업체, 품목 작업환경이 생성됩니다. 입력 자료와 현장 조사 데이터는 서버 DB가 아니라 이 기기의 브라우저 저장공간에 보관됩니다. 다른 기기에서 이어서 작업하려면 백업 파일을 내려받아 복원해 주세요.</p>
           </section>
           <section className="panel upload-panel">
             <label className="file-card">조사표 엑셀
@@ -635,7 +650,6 @@ function App() {
               <input type="file" accept={EXCEL_ACCEPT} />
               <span>선택사항</span>
             </label>
-            <p className="hint">모바일에서 파일이 안 보이면 파일 앱의 다운로드, OneDrive, Google 드라이브에서 엑셀 파일을 먼저 내려받은 뒤 선택하세요.</p>
             <button className="primary analyze-button" onClick={analyzeFiles} disabled={isAnalyzing}><Upload size={18} />{isAnalyzing ? "자료 분석 중..." : "자료 분석 시작"}</button>
             {analysis && <p className="notice">{analysis}</p>}
           </section>
@@ -1360,7 +1374,7 @@ function ItemEditor({ item, storeItems, photos, onPhoto, onDeletePhoto, onSave, 
         const nextId = nextTodoId();
         if (nextId) {
           if (await askConfirm({ title: "저장되었습니다", message: "다음 미등록 상품으로 이동할까요?", confirmText: "이동", cancelText: "현재 품목 보기" })) onMove(nextId);
-        } else if (await askConfirm({ title: "전 품목 입력완료", message: "업체리스트로 돌아갈까요?", confirmText: "업체리스트", cancelText: "현재 품목 보기" })) {
+        } else if (await askConfirm({ title: "전 품목 입력완료", message: "업체리스트로 돌아갈까요?", confirmText: "예", cancelText: "아니오" })) {
           onStoreList();
         }
       } else {

@@ -471,10 +471,13 @@ textarea { min-height: 110px; resize: vertical; }
   white-space: pre-wrap;
 }
 .confirm-actions {
-  display: flex;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   margin-top: 18px;
+}
+.confirm-actions button {
+  width: 100%;
 }
 .sort-control {
   display: grid;
@@ -1141,16 +1144,17 @@ textarea { min-height: 110px; resize: vertical; }
 }
 .item-action-fab {
   position: fixed;
-  right: 12px;
+  left: max(12px, calc(50% - 380px + 12px));
+  right: max(12px, calc(50% - 380px + 12px));
   bottom: 14px;
   z-index: 25;
   display: grid;
-  grid-template-columns: auto auto auto;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 7px;
   padding: 7px;
   padding-top: 12px;
   border: 1px solid #dbe1e5;
-  border-radius: 999px;
+  border-radius: 18px;
   background: rgba(255, 255, 255, .96);
   box-shadow: 0 12px 28px rgba(15, 23, 42, .22);
 }
@@ -1170,8 +1174,9 @@ textarea { min-height: 110px; resize: vertical; }
 .item-action-fab button {
   min-height: 46px;
   border-radius: 999px;
-  padding: 0 14px;
+  padding: 0 10px;
   font-weight: 900;
+  min-width: 0;
 }
 .save-toast {
   position: fixed;
@@ -1422,17 +1427,17 @@ textarea { min-height: 110px; resize: vertical; }
   background: rgba(15, 23, 42, .38);
   display: grid;
   place-items: center;
-  padding: 16px;
+  padding: 12px;
 }
 .modal {
-  width: min(620px, 100%);
-  max-height: min(760px, calc(100vh - 32px));
+  width: min(620px, calc(100vw - 24px));
+  max-height: min(760px, calc(100dvh - 24px));
   overflow: auto;
   background: #fff;
   border-radius: 8px;
   border: 1px solid #dbe1e5;
   box-shadow: 0 18px 50px rgba(15, 23, 42, .22);
-  padding: 16px;
+  padding: clamp(14px, 3vw, 16px);
 }
 .modal-head {
   display: grid;
@@ -1470,6 +1475,7 @@ textarea { min-height: 110px; resize: vertical; }
   .price-feedback { margin-left: 0; }
   .save-fab { right: 12px; bottom: 14px; }
   .save-toast { right: 12px; bottom: 78px; }
-  .item-action-fab { left: 12px; right: 12px; grid-template-columns: 1fr 1.2fr 1fr; }
+  .item-action-fab { left: 10px; right: 10px; grid-template-columns: 1fr 1.2fr 1fr; }
   .item-action-fab button { padding: 0 10px; }
+  .confirm-dialog { width: calc(100vw - 24px); }
 }
