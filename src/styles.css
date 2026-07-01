@@ -253,6 +253,31 @@ textarea { min-height: 110px; resize: vertical; }
   font-weight: 700;
   line-height: 1.55;
 }
+.upload-notes {
+  display: grid;
+  gap: 7px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.upload-notes li {
+  position: relative;
+  padding-left: 16px;
+  color: #52616b;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+.upload-notes li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.7em;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #0f766e;
+}
 .upload-panel {
   display: grid;
   gap: 10px;
