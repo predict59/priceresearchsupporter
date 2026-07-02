@@ -380,6 +380,7 @@ function App() {
   const [storageEstimate, setStorageEstimate] = useState<StorageEstimate | undefined>();
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locationMessage, setLocationMessage] = useState("");
+  const [locating, setLocating] = useState(false);
   const [geocodeMessage, setGeocodeMessage] = useState("");
   const [geocoding, setGeocoding] = useState(false);
   const [photosReady, setPhotosReady] = useState(false);
@@ -387,6 +388,7 @@ function App() {
   const [storeStatusDraft, setStoreStatusDraft] = useState<StoreOperatingStatus | "">("");
   const [storeStatusMessage, setStoreStatusMessage] = useState("");
   const confirmResolver = useRef<((value: boolean) => void) | null>(null);
+  const locatingRef = useRef(false);
 
   const currentRegion = settings.currentRegion;
   const regionItems = useMemo(() => items.filter((item) => item.region === currentRegion), [items, currentRegion]);
@@ -499,24 +501,34 @@ function App() {
 
   function locateUser() {
     return new Promise<{ latitude: number; longitude: number } | null>((resolve) => {
+      if (locatingRef.current) {
+        resolve(userLocation);
+        return;
+      }
       if (!navigator.geolocation) {
         setLocationMessage("이 브라우저는 위치 확인을 지원하지 않습니다.");
         resolve(null);
         return;
       }
+      locatingRef.current = true;
+      setLocating(true);
       setLocationMessage("내 위치 확인 중...");
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const next = { latitude: position.coords.latitude, longitude: position.coords.longitude };
           setUserLocation(next);
           setLocationMessage("내 위치가 확인되었습니다.");
+          locatingRef.current = false;
+          setLocating(false);
           resolve(next);
         },
         () => {
           setLocationMessage("위치 권한을 허용하면 거리순과 매장지도를 사용할 수 있습니다.");
+          locatingRef.current = false;
+          setLocating(false);
           resolve(null);
         },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+        { enableHighAccuracy: false, timeout: 6000, maximumAge: 30000 },
       );
     });
   }
@@ -1068,6 +1080,14 @@ function App() {
           <button onClick={() => { setView("backup"); setMenuOpen(false); }}>백업/복원</button>
         </div>
       </header>
+      {locating && (
+        <div className="soft-loading" role="status" aria-live="polite">
+          <div className="soft-loading-pill">
+            <div className="loader-ring small" />
+            <strong>내 위치 확인 중...</strong>
+          </div>
+        </div>
+      )}
 
       {view === "upload" && (
         <main className="page narrow upload-page">
@@ -1634,7 +1654,7 @@ function StoreCard({
       </div>
       <div className="store-meta">
         {stats.photoMissing > 0 && <span className="store-missing">품목사진 누락 {stats.photoMissing.toLocaleString()}건</span>}
-        {distanceText && <span className="store-distance">현재 위치 {distanceText}</span>}
+        <span className={`store-distance ${distanceText ? "" : "empty"}`}>{distanceText ? `현재 위치 ${distanceText}` : "현재 위치 -"}</span>
         <span className="store-date">조사일: {latestSurveyDate}</span>
       </div>
       <div className="card-actions">
@@ -1666,23 +1686,33 @@ function StoreMapView({ stores, statsByStore, userLocation, locationMessage, sel
       if (cancelled || !mapNode.current) return;
       const map = leafletMap.current ?? leaflet.map(mapNode.current, { zoomControl: true, attributionControl: true });
       if (!leafletMap.current) {
-        const primaryTiles = leaflet.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-          maxZoom: 19,
-          subdomains: "abcd",
-          attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
-        });
-        const fallbackTiles = leaflet.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          maxZoom: 19,
-          attribution: "&copy; OpenStreetMap contributors",
-        });
-        let fallbackStarted = false;
-        primaryTiles.on("tileerror", () => {
-          if (fallbackStarted) return;
-          fallbackStarted = true;
-          primaryTiles.remove();
-          fallbackTiles.addTo(map);
-        });
-        primaryTiles.addTo(map);
+        const tileConfigs = [
+          {
+            url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+            options: { maxZoom: 19, attribution: "&copy; OpenStreetMap contributors" },
+          },
+          {
+            url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
+            options: { maxZoom: 19, subdomains: "abcd", attribution: "&copy; OpenStreetMap contributors &copy; CARTO" },
+          },
+          {
+            url: "https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png",
+            options: { maxZoom: 19, attribution: "&copy; OpenStreetMap contributors, Tiles style by HOT" },
+          },
+        ] as const;
+        let tileIndex = 0;
+        let activeTiles: import("leaflet").TileLayer | null = null;
+        const addTiles = () => {
+          const config = tileConfigs[Math.min(tileIndex, tileConfigs.length - 1)];
+          activeTiles?.remove();
+          activeTiles = leaflet.tileLayer(config.url, config.options).addTo(map);
+          activeTiles.on("tileerror", () => {
+            if (tileIndex >= tileConfigs.length - 1) return;
+            tileIndex += 1;
+            addTiles();
+          });
+        };
+        addTiles();
         leafletMap.current = map;
       }
       window.requestAnimationFrame(() => map.invalidateSize());
