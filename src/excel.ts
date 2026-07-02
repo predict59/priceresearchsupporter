@@ -67,6 +67,8 @@ const aliases: Record<string, string[]> = {
   district: ["지역", "시군구", "구군"],
   department: ["담당부서", "담당", "부서", "지회", "담당지회"],
   address: ["주소", "마트주소", "판매처주소", "매장주소"],
+  latitude: ["위도", "latitude", "lat", "y좌표", "y"],
+  longitude: ["경도", "longitude", "lng", "lon", "x좌표", "x"],
 };
 
 const clean = (value: unknown) => String(value ?? "").trim();
@@ -133,6 +135,8 @@ export async function parseSurveyWorkbook(file: File): Promise<{ regions: Region
     const resolved = resolveSurveyRegion(pick(row, "city"), pick(row, "district"), pick(row, "region") || sheetName);
     const martName = pick(row, "martName") || pick(row, "companyName") || "미상 방문지";
     const address = pick(row, "address");
+    const latitude = numberOrNull(pick(row, "latitude"));
+    const longitude = numberOrNull(pick(row, "longitude"));
     const key = storeKey(resolved.name, martName, address);
     if (!storeMap.has(key)) {
       storeMap.set(key, {
@@ -142,6 +146,10 @@ export async function parseSurveyWorkbook(file: File): Promise<{ regions: Region
         city: resolved.city,
         storeName: martName,
         storeAddress: address,
+        latitude: latitude ?? undefined,
+        longitude: longitude ?? undefined,
+        geocodeStatus: latitude !== null && longitude !== null ? "성공" : "미시도",
+        mapIncluded: true,
         operatingStatus: "영업 중",
         itemCount: 0,
         completedCount: 0,

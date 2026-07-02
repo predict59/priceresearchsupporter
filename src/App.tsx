@@ -7,7 +7,7 @@ import { dataUrlToBlob, exportBackup, exportRegionExcel, exportRegionZip } from 
 import { mapSearchAddress, requiredPhotoLabels, summarize } from "./logic";
 import type { AppSettings, BackupPayload, PhotoType, Region, RegionStats, StoreOperatingStatus, SurveyItem, SurveyPhoto, SurveyStore } from "./types";
 
-type View = "upload" | "regions" | "workspace" | "store" | "items" | "item" | "backup" | "validation";
+type View = "upload" | "regions" | "workspace" | "map" | "store" | "items" | "item" | "backup" | "validation";
 type Filter = "전체" | "미완료" | "미조사" | "조사중" | "완료" | "사진누락";
 type StoreSort = "임의 지정 순" | "주소순" | "품목 많은 순" | "미완료 많은 순" | "사진누락 많은 순";
 type ConfirmState = {
@@ -844,6 +844,7 @@ function App() {
       setItemQuery("");
       setView("regions");
     }
+    else if (view === "map") setView("workspace");
     else if (view === "store") setView("workspace");
     else if (view === "items") {
       setItemQuery("");
@@ -862,6 +863,7 @@ function App() {
   const screenTitle =
     view === "regions" ? "메인"
     : view === "workspace" ? "마트리스트"
+    : view === "map" ? "지도"
     : view === "store" ? "마트정보"
     : view === "items" ? "물품리스트"
     : view === "item" ? "가격정보"
@@ -1008,6 +1010,7 @@ function App() {
                   순서 편집
                 </button>
               )}
+              <button className="map-view-button" type="button" onClick={() => setView("map")}><MapPin size={16} /> 지도 보기</button>
             </section>
           )}
           <div className="list">
@@ -1026,6 +1029,7 @@ function App() {
                   dragging={dragStoreId === store.id}
                   onOpen={() => openStore(store)}
                   onContacts={() => setContactStoreId(store.id)}
+                  onMapToggle={async () => { await putStore({ ...store, mapIncluded: store.mapIncluded === false, updatedAt: now() }); await refresh(store.region); }}
                   onOrderChange={(value) => saveVisitOrder(store, value)}
                   onMoveUp={() => moveVisitOrder(store, -1)}
                   onMoveDown={() => moveVisitOrder(store, 1)}
@@ -1038,6 +1042,16 @@ function App() {
             })}
           </div>
         </main>
+      )}
+
+      {view === "map" && currentRegion && (
+        <StoreMapView
+          region={currentRegion}
+          stores={regionStores.filter((store) => store.mapIncluded !== false)}
+          statsByStore={regionStatsByStore}
+          onOpen={(store) => openStore(store)}
+          onToggle={async (store) => { await putStore({ ...store, mapIncluded: false, updatedAt: now() }); await refresh(store.region); }}
+        />
       )}
 
       {view === "store" && selectedStore && (
@@ -1369,6 +1383,14 @@ function storeDisplayStatus(store: SurveyStore) {
   return store.frontPhotoId ? store.operatingStatus ?? "미확인" : "미확인";
 }
 
+function hasStoreCoordinates(store: SurveyStore) {
+  return typeof store.latitude === "number" && Number.isFinite(store.latitude) && typeof store.longitude === "number" && Number.isFinite(store.longitude);
+}
+
+function isStoreComplete(store: SurveyStore, stats: RegionStats) {
+  return Boolean(store.frontPhotoId) && stats.total > 0 && stats.completed === stats.total;
+}
+
 function StoreCard({
   store,
   stats,
@@ -1378,6 +1400,7 @@ function StoreCard({
   dragging,
   onOpen,
   onContacts,
+  onMapToggle,
   onOrderChange,
   onMoveUp,
   onMoveDown,
@@ -1394,6 +1417,7 @@ function StoreCard({
   dragging: boolean;
   onOpen: () => void;
   onContacts: () => void;
+  onMapToggle: () => void;
   onOrderChange: (value: string) => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
@@ -1405,7 +1429,7 @@ function StoreCard({
   const completed = items.filter((item) => item.status === "완료");
   const latestSurveyDate = completed.map((item) => item.surveyDate).filter(Boolean).sort().at(-1) ?? "-";
   const percent = stats.total ? Math.round((stats.completed / stats.total) * 100) : 0;
-  const completedStore = Boolean(store.frontPhotoId) && stats.total > 0 && stats.completed === stats.total;
+  const completedStore = isStoreComplete(store, stats);
   const displayOperatingStatus = storeDisplayStatus(store);
   if (orderEditing) {
     return (
@@ -1434,10 +1458,12 @@ function StoreCard({
         <details className="card-menu">
           <summary aria-label="마트 메뉴"><MoreVertical size={18} /></summary>
           <div className="menu-popover">
+            <button type="button" onClick={onMapToggle}><MapPin size={15} />{store.mapIncluded === false ? "지도 대상 포함" : "지도 대상 제외"}</button>
             {mapLinks(store.storeAddress).map(([name, href]) => <a key={name} href={href} target="_blank"><MapPin size={15} />{name} 지도</a>)}
           </div>
         </details>
       </div>
+      {store.mapIncluded === false && <span className="map-excluded-badge">지도 제외</span>}
       <div className="store-progress">
         <div className="store-metric-row">
           <span>물품</span>
@@ -1454,6 +1480,130 @@ function StoreCard({
         <button className="primary" onClick={onOpen}>입력</button>
       </div>
     </article>
+  );
+}
+
+function StoreMapView({ region, stores, statsByStore, onOpen, onToggle }: { region: string; stores: SurveyStore[]; statsByStore: Map<string, RegionStats>; onOpen: (store: SurveyStore) => void; onToggle: (store: SurveyStore) => void | Promise<void> }) {
+  const mapNode = useRef<HTMLDivElement | null>(null);
+  const [activeStoreId, setActiveStoreId] = useState(stores.find(hasStoreCoordinates)?.id ?? "");
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [locationMessage, setLocationMessage] = useState("");
+  const mappedStores = stores.filter(hasStoreCoordinates);
+  const missingStores = stores.filter((store) => !hasStoreCoordinates(store));
+  const activeStore = stores.find((store) => store.id === activeStoreId);
+  const completedCount = stores.filter((store) => isStoreComplete(store, statsByStore.get(store.id) ?? emptyStats)).length;
+  const mapSignature = [
+    mappedStores.map((store) => `${store.id}:${store.latitude}:${store.longitude}:${isStoreComplete(store, statsByStore.get(store.id) ?? emptyStats) ? "1" : "0"}`).join("|"),
+    activeStoreId,
+    userLocation ? `${userLocation.latitude}:${userLocation.longitude}` : "",
+  ].join("::");
+
+  useEffect(() => {
+    let cancelled = false;
+    let map: import("leaflet").Map | undefined;
+    import("leaflet").then((leaflet) => {
+      if (cancelled || !mapNode.current) return;
+      map = leaflet.map(mapNode.current, { zoomControl: true, attributionControl: true });
+      leaflet.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "&copy; OpenStreetMap contributors",
+      }).addTo(map);
+      const bounds: import("leaflet").LatLngExpression[] = [];
+      mappedStores.forEach((store) => {
+        const stats = statsByStore.get(store.id) ?? emptyStats;
+        const completed = isStoreComplete(store, stats);
+        const selected = store.id === activeStoreId;
+        const latLng: import("leaflet").LatLngExpression = [store.latitude!, store.longitude!];
+        bounds.push(latLng);
+        leaflet.circleMarker(latLng, {
+          radius: selected ? 11 : 9,
+          color: selected ? "#2563eb" : completed ? "#6b7280" : "#dc2626",
+          weight: selected ? 4 : 2,
+          fillColor: selected ? "#3b82f6" : completed ? "#9ca3af" : "#ef4444",
+          fillOpacity: 0.82,
+        })
+          .addTo(map!)
+          .bindTooltip(`${store.storeName} · ${completed ? "완료" : "미완료"}`)
+          .on("click", () => setActiveStoreId(store.id));
+      });
+      if (userLocation) {
+        const latLng: import("leaflet").LatLngExpression = [userLocation.latitude, userLocation.longitude];
+        bounds.push(latLng);
+        leaflet.circleMarker(latLng, {
+          radius: 8,
+          color: "#0284c7",
+          weight: 3,
+          fillColor: "#38bdf8",
+          fillOpacity: 0.9,
+        }).addTo(map).bindTooltip("내 위치");
+      }
+      if (bounds.length) map.fitBounds(leaflet.latLngBounds(bounds), { padding: [28, 28], maxZoom: 15 });
+      else map.setView([36.5, 127.8], 7);
+    });
+    return () => {
+      cancelled = true;
+      map?.remove();
+    };
+  }, [mapSignature, mappedStores, statsByStore, activeStoreId, userLocation]);
+
+  const locateMe = () => {
+    if (!navigator.geolocation) {
+      setLocationMessage("이 브라우저는 위치 확인을 지원하지 않습니다.");
+      return;
+    }
+    setLocationMessage("내 위치 확인 중...");
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserLocation({ latitude: position.coords.latitude, longitude: position.coords.longitude });
+        setLocationMessage("내 위치가 표시되었습니다.");
+      },
+      () => setLocationMessage("위치 권한을 허용하면 내 위치를 표시할 수 있습니다."),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+    );
+  };
+
+  return (
+    <main className="page map-page">
+      <section className="map-summary">
+        <div>
+          <strong>{region}</strong>
+          <span>지도 대상 {stores.length.toLocaleString()}개 · 완료 {completedCount.toLocaleString()}개 · 미완료 {(stores.length - completedCount).toLocaleString()}개</span>
+        </div>
+        <button type="button" onClick={locateMe}>내 위치</button>
+      </section>
+      {locationMessage && <p className="map-location-message">{locationMessage}</p>}
+      <section className="map-panel">
+        <div ref={mapNode} className="store-map" />
+      </section>
+      <section className="panel map-active-panel">
+        {activeStore ? (
+          <>
+            <h2>{activeStore.storeName}</h2>
+            <p>{activeStore.storeAddress || "주소 없음"}</p>
+            <div className="map-active-actions">
+              <button type="button" className="primary" onClick={() => onOpen(activeStore)}>입력</button>
+              <button type="button" onClick={() => onToggle(activeStore)}>지도 대상 제외</button>
+            </div>
+          </>
+        ) : (
+          <p className="muted">좌표가 있는 마트를 선택하면 여기에 정보가 표시됩니다.</p>
+        )}
+      </section>
+      {missingStores.length > 0 && (
+        <section className="panel">
+          <h2>좌표 없음 ({missingStores.length.toLocaleString()}개)</h2>
+          <p className="muted">엑셀에 위도/경도 컬럼을 추가하면 지도에 마커로 표시됩니다.</p>
+          <div className="map-missing-list">
+            {missingStores.slice(0, 80).map((store) => (
+              <button key={store.id} type="button" onClick={() => onOpen(store)}>
+                <strong>{store.storeName}</strong>
+                <span>{store.storeAddress || "주소 없음"}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+    </main>
   );
 }
 

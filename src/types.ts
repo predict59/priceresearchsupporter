@@ -20,6 +20,11 @@ export type SurveyStore = {
   storeName: string;
   storeAddress: string;
   visitOrder?: number;
+  mapIncluded?: boolean;
+  latitude?: number;
+  longitude?: number;
+  geocodedAt?: string;
+  geocodeStatus?: "성공" | "실패" | "미시도";
   operatingStatus?: StoreOperatingStatus;
   itemCount: number;
   completedCount: number;
