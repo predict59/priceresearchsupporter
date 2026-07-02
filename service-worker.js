@@ -1,4 +1,4 @@
-const CACHE_NAME = "mw-price-survey-v6";
+const CACHE_NAME = "mw-price-survey-v7";
 const BASE_PATH = new URL(self.registration.scope).pathname.replace(/\/$/, "");
 const path = (value) => `${BASE_PATH}${value}`;
 const APP_SHELL = [path("/"), path("/index.html"), path("/manifest.json"), path("/pwa-icon.svg")];
@@ -19,6 +19,10 @@ self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
   const requestUrl = new URL(event.request.url);
   const isSameOrigin = requestUrl.origin === self.location.origin;
+  if (!isSameOrigin) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
   event.respondWith(
     fetch(event.request)
         .then((response) => {
