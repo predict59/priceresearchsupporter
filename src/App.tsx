@@ -37,6 +37,9 @@ const PHOTO_MIN_EDGE = 760;
 const PHOTO_QUALITY_STEPS = [0.72, 0.64, 0.56, 0.48, 0.4, 0.32];
 const PRICE_DIFF_WARN_PERCENT = 30;
 const TARGET_MAP_URL = "https://www.google.com/maps/d/u/1/viewer?mid=1ej99Lo6WS4GROBCQPr0a66MhQR_vXuM&ll=37.49945198941339%2C127.04262669775987&z=14";
+type PriceCandidate = { value: number; score: number; source: "comma" | "plain" };
+const PRICE_KEYWORDS = /원|가격|정상|판매|할인|행사|특가|세일|SALE|sale|올리브|카드|멤버십|회원|쿠폰/;
+const PRICE_MAX_VALUE = 999999;
 const appendMemoText = (memo: string, text: string) => {
   const parts = memo.split("/").map((part) => part.trim()).filter(Boolean);
   if (parts.includes(text)) return memo;
@@ -153,6 +156,54 @@ async function detectBarcodeFromFile(file: File) {
   } finally {
     bitmap.close();
   }
+}
+
+const addPriceCandidate = (bucket: Map<number, PriceCandidate>, text: string, raw: string, index: number, source: PriceCandidate["source"]) => {
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length < 3 || digits.length > 6) return;
+  const value = Number(digits);
+  if (!Number.isFinite(value) || value < 100 || value > PRICE_MAX_VALUE) return;
+
+  const context = text.slice(Math.max(0, index - 24), Math.min(text.length, index + raw.length + 24));
+  let score = source === "comma" ? 60 : 24;
+  if (PRICE_KEYWORDS.test(context)) score += 28;
+  if (/[원￦₩]/.test(context)) score += 18;
+  if (/할인|행사|특가|세일|SALE|sale/.test(context)) score += 12;
+  if (/%|g|kg|ml|L|개입|입|매|번|호|월|일/.test(context)) score -= 12;
+  if (value % 10 !== 0) score -= 6;
+  if (value >= 1000 && value <= 300000) score += 8;
+
+  const existing = bucket.get(value);
+  if (!existing || existing.score < score) bucket.set(value, { value, score, source });
+};
+
+function extractPriceCandidates(text: string) {
+  const normalized = text
+    .replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0))
+    .replace(/[，]/g, ",")
+    .replace(/(\d)\s*,\s*(\d{3})/g, "$1,$2");
+  const bucket = new Map<number, PriceCandidate>();
+
+  for (const match of normalized.matchAll(/\d{1,3}(?:,\d{3})+/g)) {
+    addPriceCandidate(bucket, normalized, match[0], match.index ?? 0, "comma");
+  }
+  for (const match of normalized.matchAll(/(?:^|[^\d,])(\d{3,6})(?![\d,])/g)) {
+    const raw = match[1];
+    addPriceCandidate(bucket, normalized, raw, (match.index ?? 0) + match[0].indexOf(raw), "plain");
+  }
+
+  return Array.from(bucket.values())
+    .filter((candidate) => candidate.score > 18)
+    .sort((a, b) => b.score - a.score || b.value - a.value)
+    .slice(0, 4);
+}
+
+async function detectPriceCandidatesFromBlob(blob: Blob) {
+  const tesseract = await import("tesseract.js");
+  const result = await tesseract.recognize(blob, "kor+eng", {
+    logger: () => undefined,
+  });
+  return extractPriceCandidates(result.data.text);
 }
 
 async function resizePhoto(file: File) {
@@ -1434,6 +1485,8 @@ function ItemEditor({ item, storeItems, storeOperatingStatus, photos, onSave, on
   const [localPhotos, setLocalPhotos] = useState<SurveyPhoto[]>(photos);
   const [deletedPhotoIds, setDeletedPhotoIds] = useState<string[]>([]);
   const [photoMessage, setPhotoMessage] = useState("");
+  const [priceOcrMessage, setPriceOcrMessage] = useState("");
+  const [priceCandidates, setPriceCandidates] = useState<PriceCandidate[]>([]);
   const [saveMessage, setSaveMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   useEffect(() => {
@@ -1441,6 +1494,8 @@ function ItemEditor({ item, storeItems, storeOperatingStatus, photos, onSave, on
     setLocalPhotos(photos);
     setDeletedPhotoIds([]);
     setPhotoMessage("");
+    setPriceOcrMessage("");
+    setPriceCandidates([]);
   }, [item.id]);
   useEffect(() => {
     if (!saveMessage) return;
@@ -1466,12 +1521,30 @@ function ItemEditor({ item, storeItems, storeOperatingStatus, photos, onSave, on
       danger: true,
     });
   };
+  const runPriceOcr = async (blob: Blob) => {
+    setPriceCandidates([]);
+    setPriceOcrMessage("가격 인식 중...");
+    try {
+      const candidates = await detectPriceCandidatesFromBlob(blob);
+      setPriceCandidates(candidates);
+      setPriceOcrMessage(candidates.length > 0 ? "가격이 인식되었습니다." : "가격 인식 실패");
+    } catch (error) {
+      console.error(error);
+      setPriceCandidates([]);
+      setPriceOcrMessage("가격 인식 실패");
+    }
+  };
   const upload = async (type: PhotoType, file: File) => {
     const resized = await resizePhoto(file);
     const oldPhotos = localPhotos.filter((photo) => photo.itemId === draft.id && photo.type === type);
     setDeletedPhotoIds((old) => [...old, ...oldPhotos.filter((photo) => !photo.id.startsWith("temp_")).map((photo) => photo.id)]);
     const photo: SurveyPhoto = { id: uid("temp_photo"), region: draft.region, storeId: draft.storeId, itemId: draft.id, type, blob: resized.blob, originalName: file.name, mimeType: resized.mimeType, takenAt: now() };
     setLocalPhotos((old) => [...old.filter((candidate) => !(candidate.itemId === draft.id && candidate.type === type)), photo]);
+    if (type === "PRODUCT_DISPLAY") {
+      setPhotoMessage("");
+      void runPriceOcr(resized.blob);
+      return;
+    }
     if (type !== "PRODUCT_INFO_BARCODE") {
       setPhotoMessage("");
       return;
@@ -1693,6 +1766,7 @@ function ItemEditor({ item, storeItems, storeOperatingStatus, photos, onSave, on
       {!draft.normalDisplay && <p className="notice">먼저 ② 실물 확인에서 진열여부 O/X를 선택해 주세요.</p>}
       {draft.normalDisplay === "O" && <p className="small-help barcode-help">참고: 제품정보사진 촬영 시 브라우저가 지원하면 바코드를 자동 비교합니다.</p>}
       {photoMessage && draft.normalDisplay === "O" && <p className="ok upload-message">{photoMessage}</p>}
+      {priceOcrMessage && draft.normalDisplay === "O" && <p className={`upload-message ${priceCandidates.length ? "ok" : priceOcrMessage.includes("중") ? "pending" : "warn"}`}>{priceOcrMessage}</p>}
       <PhotoSlot id="photo-product-display" label="제품진열사진" description="가격정보와 진열상품이 동시노출 되도록 촬영" disabled={draft.normalDisplay !== "O"} photo={itemPhotos.display} onFile={(file) => upload("PRODUCT_DISPLAY", file)} onDelete={(photo) => { setDeletedPhotoIds((old) => photo.id.startsWith("temp_") ? old : [...old, photo.id]); setLocalPhotos((old) => old.filter((candidate) => candidate.id !== photo.id)); }} />
       <PhotoSlot id="photo-product-info" label="제품정보사진" description="상품후면 제품상세정보와 바코드 동시노출 되도록 촬영" disabled={draft.normalDisplay !== "O"} photo={itemPhotos.info} onFile={(file) => upload("PRODUCT_INFO_BARCODE", file)} onDelete={(photo) => { setDeletedPhotoIds((old) => photo.id.startsWith("temp_") ? old : [...old, photo.id]); setLocalPhotos((old) => old.filter((candidate) => candidate.id !== photo.id)); }} />
       <PhotoSlot id="photo-pos-receipt" label="POS/영수증사진" description="제품진열사진으로 가격정보 확인불가 시 POS기 또는 영수증 촬영" disabled={!draft.normalDisplay} photo={itemPhotos.pos} onFile={(file) => upload("POS_RECEIPT", file)} onDelete={(photo) => { setDeletedPhotoIds((old) => photo.id.startsWith("temp_") ? old : [...old, photo.id]); setLocalPhotos((old) => old.filter((candidate) => candidate.id !== photo.id)); }} />
@@ -1701,6 +1775,7 @@ function ItemEditor({ item, storeItems, storeOperatingStatus, photos, onSave, on
       <h2>⑤ 가격</h2>
       <p className="price-base">기준가격: <strong>{draft.basePrice?.toLocaleString() ?? "-"}원</strong></p>
       {priceBlocked && <p className="small-help warn">바코드 미등록 미판매 상품은 가격 입력을 생략합니다.</p>}
+      <PriceCandidateChips label="정상가 후보" candidates={priceCandidates} disabled={priceBlocked} onPick={(value) => update({ normalPrice: value, discountPrice: draft.memo.includes("1+1 행사") ? Math.round(value / 2) : draft.discountPrice })} />
       <Money label="정상가" disabled={priceBlocked} value={draft.normalPrice} onChange={(value) => { const normalPrice = num(value); update({ normalPrice, discountPrice: draft.memo.includes("1+1 행사") && normalPrice !== null ? Math.round(normalPrice / 2) : draft.discountPrice }); }} />
       {priceFeedback && <div className="price-feedback">{priceFeedback.messages.map((message) => <span className={message.type} key={message.text}><i aria-hidden="true">{message.type === "warn" ? "!" : "✓"}</i>{message.text}</span>)}</div>}
       <Choice label="할인 여부" disabled={priceBlocked} value={draft.hasDiscount === null ? "" : draft.hasDiscount ? "할인 있음" : "할인 없음"} values={["할인 없음", "할인 있음"]} onChange={updateDiscountEnabled} />
@@ -1709,6 +1784,7 @@ function ItemEditor({ item, storeItems, storeOperatingStatus, photos, onSave, on
           <span>행사여부</span>
           <label className="pretty-check"><input type="checkbox" disabled={draft.hasDiscount === false || priceBlocked} checked={draft.memo.includes("1+1 행사")} onChange={(event) => updateOnePlusOne(event.target.checked)} /><i />1+1 행사</label>
         </div>
+        <PriceCandidateChips label="할인가 후보" candidates={priceCandidates} disabled={draft.hasDiscount === false || priceBlocked} onPick={(value) => update({ hasDiscount: true, discountPrice: value })} />
         <Money label="할인가" value={draft.discountPrice} disabled={draft.hasDiscount === false || priceBlocked} onChange={(value) => update({ discountPrice: num(value) })} />
         <DiscountControls
           disabled={draft.hasDiscount === false || priceBlocked}
@@ -1732,6 +1808,22 @@ function ItemEditor({ item, storeItems, storeOperatingStatus, photos, onSave, on
       <button type="button" onClick={saveAndNext} disabled={isSaving}>다음</button>
     </div>
   </main>;
+}
+
+function PriceCandidateChips({ label, candidates, disabled, onPick }: { label: string; candidates: PriceCandidate[]; disabled?: boolean; onPick: (value: number) => void }) {
+  if (candidates.length === 0) return null;
+  return (
+    <div className={`price-candidates ${disabled ? "disabled-block" : ""}`}>
+      <span>{label}</span>
+      <div>
+        {candidates.map((candidate) => (
+          <button type="button" key={`${label}-${candidate.value}`} disabled={disabled} onClick={() => onPick(candidate.value)}>
+            {candidate.value.toLocaleString()}원
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function PhotoSlot({ id, label, description, disabled, photo, onFile, onDelete }: { id: string; label: string; description: string; disabled?: boolean; photo?: SurveyPhoto; onFile: (file: File) => void | Promise<void>; onDelete: (photo: SurveyPhoto) => void | Promise<void> }) {

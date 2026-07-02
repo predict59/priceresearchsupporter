@@ -902,6 +902,10 @@ textarea { min-height: 110px; resize: vertical; }
 }
 .photo-actions .photo-button { margin: 0; min-height: 46px; }
 .upload-message { margin: 0 0 10px; }
+.upload-message.pending {
+  color: #0f766e;
+  font-weight: 800;
+}
 .item-hero {
   position: relative;
   z-index: 1;
@@ -1269,6 +1273,39 @@ textarea { min-height: 110px; resize: vertical; }
 .price-base strong {
   color: #17202a;
   font-size: 15px;
+}
+.price-candidates {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  margin: 0 0 12px;
+}
+.price-candidates > span {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 900;
+}
+.price-candidates > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+.price-candidates button {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid #99f6e4;
+  background: #ecfdf5;
+  color: #0f766e;
+  font-size: 13px;
+  font-weight: 900;
+}
+.price-candidates button:disabled {
+  color: #94a3b8;
+  border-color: #e2e8f0;
+  background: #f8fafc;
 }
 .price-feedback {
   margin: -4px 0 12px 130px;
@@ -1790,7 +1827,9 @@ textarea { min-height: 110px; resize: vertical; }
     max-width: 100%;
     overflow-x: hidden;
   }
-  .price-feedback { margin-left: 0; }
+  .price-feedback,
+  .price-candidates { margin-left: 0; }
+  .price-candidates { grid-template-columns: 1fr; }
   .save-fab { right: 12px; bottom: 14px; }
   .save-toast {
     left: 50%;
