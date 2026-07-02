@@ -153,40 +153,6 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   border-radius: 50%;
   animation: spin .85s linear infinite;
 }
-.loader-ring.small {
-  width: 22px;
-  height: 22px;
-  border-width: 3px;
-}
-.soft-loading {
-  position: fixed;
-  inset: var(--topbar-height) 0 0;
-  z-index: 120;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding-top: 14px;
-  background: rgba(246, 247, 248, .58);
-  backdrop-filter: blur(1px);
-  pointer-events: auto;
-}
-.soft-loading-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 38px;
-  padding: 0 14px;
-  border: 1px solid #c9d2d8;
-  border-radius: 999px;
-  background: rgba(255,255,255,.94);
-  color: #17202a;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, .12);
-  font-size: 13px;
-  font-weight: 900;
-}
-.soft-loading-pill strong {
-  font-size: 13px;
-}
 @keyframes spin { to { transform: rotate(360deg); } }
 .page { width: min(1180px, 100%); max-width: 100%; margin: 0 auto; padding: 14px 14px 96px; overflow-x: clip; }
 .workspace-page {

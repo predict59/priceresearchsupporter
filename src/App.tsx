@@ -380,7 +380,6 @@ function App() {
   const [storageEstimate, setStorageEstimate] = useState<StorageEstimate | undefined>();
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locationMessage, setLocationMessage] = useState("");
-  const [locating, setLocating] = useState(false);
   const [geocodeMessage, setGeocodeMessage] = useState("");
   const [geocoding, setGeocoding] = useState(false);
   const [photosReady, setPhotosReady] = useState(false);
@@ -389,6 +388,7 @@ function App() {
   const [storeStatusMessage, setStoreStatusMessage] = useState("");
   const confirmResolver = useRef<((value: boolean) => void) | null>(null);
   const locatingRef = useRef(false);
+  const initialLocationRequested = useRef(false);
 
   const currentRegion = settings.currentRegion;
   const regionItems = useMemo(() => items.filter((item) => item.region === currentRegion), [items, currentRegion]);
@@ -445,7 +445,7 @@ function App() {
     () => sortedRegionStores.filter((store) => store.mapIncluded === true),
     [sortedRegionStores],
   );
-  const canUseStoreMap = Boolean(userLocation);
+  const canUseStoreMap = true;
   const assignmentVisibleStores = useMemo(() => {
     const query = storeQuery.trim();
     if (!query) return sortedRegionStores;
@@ -469,8 +469,10 @@ function App() {
     if (view === "workspace" && workspaceMode === "map" && !canUseStoreMap) setWorkspaceMode("list");
   }, [view, workspaceMode, canUseStoreMap]);
   useEffect(() => {
-    if (view === "workspace") void locateUser();
-  }, [view, workspaceMode, currentRegion]);
+    if (initialLocationRequested.current) return;
+    initialLocationRequested.current = true;
+    void locateUser();
+  }, []);
   const stats = useMemo(() => summarize(regionItems, photos), [regionItems, photos]);
 
   function askConfirm(options: ConfirmState) {
@@ -506,26 +508,23 @@ function App() {
         return;
       }
       if (!navigator.geolocation) {
-        setLocationMessage("이 브라우저는 위치 확인을 지원하지 않습니다.");
+        setLocationMessage("");
         resolve(null);
         return;
       }
       locatingRef.current = true;
-      setLocating(true);
-      setLocationMessage("내 위치 확인 중...");
+      setLocationMessage("");
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const next = { latitude: position.coords.latitude, longitude: position.coords.longitude };
           setUserLocation(next);
-          setLocationMessage("내 위치가 확인되었습니다.");
+          setLocationMessage("");
           locatingRef.current = false;
-          setLocating(false);
           resolve(next);
         },
         () => {
-          setLocationMessage("위치 권한을 허용하면 거리순과 매장지도를 사용할 수 있습니다.");
+          setLocationMessage("");
           locatingRef.current = false;
-          setLocating(false);
           resolve(null);
         },
         { enableHighAccuracy: false, timeout: 6000, maximumAge: 30000 },
@@ -1080,15 +1079,6 @@ function App() {
           <button onClick={() => { setView("backup"); setMenuOpen(false); }}>백업/복원</button>
         </div>
       </header>
-      {locating && (
-        <div className="soft-loading" role="status" aria-live="polite">
-          <div className="soft-loading-pill">
-            <div className="loader-ring small" />
-            <strong>내 위치 확인 중...</strong>
-          </div>
-        </div>
-      )}
-
       {view === "upload" && (
         <main className="page narrow upload-page">
           <section className="upload-hero">
@@ -1228,8 +1218,6 @@ function App() {
               stores={assignedRegionStores}
               statsByStore={regionStatsByStore}
               userLocation={userLocation}
-              locationMessage={locationMessage}
-              onLocate={locateUser}
               selectedStoreId={selectedStoreId}
               onOpen={(store) => openStore(store)}
               onContacts={(store) => setContactStoreId(store.id)}
@@ -1665,13 +1653,14 @@ function StoreCard({
   );
 }
 
-function StoreMapView({ stores, statsByStore, userLocation, locationMessage, selectedStoreId, onOpen, onContacts, onToggle }: { stores: SurveyStore[]; statsByStore: Map<string, RegionStats>; userLocation: { latitude: number; longitude: number } | null; locationMessage: string; selectedStoreId: string; onLocate: () => Promise<{ latitude: number; longitude: number } | null>; onOpen: (store: SurveyStore) => void; onContacts: (store: SurveyStore) => void; onToggle: (store: SurveyStore) => void | Promise<void> }) {
+function StoreMapView({ stores, statsByStore, userLocation, selectedStoreId, onOpen, onContacts, onToggle }: { stores: SurveyStore[]; statsByStore: Map<string, RegionStats>; userLocation: { latitude: number; longitude: number } | null; selectedStoreId: string; onOpen: (store: SurveyStore) => void; onContacts: (store: SurveyStore) => void; onToggle: (store: SurveyStore) => void | Promise<void> }) {
   const mapNode = useRef<HTMLDivElement | null>(null);
   const leafletMap = useRef<import("leaflet").Map | null>(null);
   const markerLayer = useRef<import("leaflet").LayerGroup | null>(null);
-  const mappedStores = stores.filter(hasStoreCoordinates);
+  const mappedStores = useMemo(() => stores.filter(hasStoreCoordinates), [stores]);
   const initialActiveId = selectedStoreId && mappedStores.some((store) => store.id === selectedStoreId) ? selectedStoreId : mappedStores[0]?.id ?? "";
   const [activeStoreId, setActiveStoreId] = useState(initialActiveId);
+  const [mapReady, setMapReady] = useState(0);
   const activeStore = stores.find((store) => store.id === activeStoreId);
   const completedCount = stores.filter((store) => isStoreComplete(store, statsByStore.get(store.id) ?? emptyStats)).length;
   const locationText = userLocation ? `내 위치: ${userLocation.latitude.toFixed(5)}, ${userLocation.longitude.toFixed(5)}` : "내 위치: 확인 필요";
@@ -1682,61 +1671,74 @@ function StoreMapView({ stores, statsByStore, userLocation, locationMessage, sel
 
   useEffect(() => {
     let cancelled = false;
+    let fallbackTimer: ReturnType<typeof window.setTimeout> | null = null;
     import("leaflet").then((leaflet) => {
-      if (cancelled || !mapNode.current) return;
-      const map = leafletMap.current ?? leaflet.map(mapNode.current, { zoomControl: true, attributionControl: true });
-      if (!leafletMap.current) {
-        const tileConfigs: Array<{ url: string; options: import("leaflet").TileLayerOptions }> = [
-          {
-            url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
-            options: {
-              maxZoom: 19,
-              attribution: "Tiles &copy; Esri &mdash; Sources: Esri, OpenStreetMap contributors",
-            },
-          },
-          {
-            url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-            options: { maxZoom: 19, attribution: "&copy; OpenStreetMap contributors" },
-          },
-          {
-            url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
-            options: { maxZoom: 19, subdomains: "abcd", attribution: "&copy; OpenStreetMap contributors &copy; CARTO" },
-          },
-          {
-            url: "https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png",
-            options: { maxZoom: 19, attribution: "&copy; OpenStreetMap contributors, Tiles style by HOT" },
-          },
-        ];
-        let tileIndex = 0;
-        let activeTiles: import("leaflet").TileLayer | null = null;
-        let fallbackTimer: ReturnType<typeof window.setTimeout> | null = null;
-        const addTiles = () => {
-          const config = tileConfigs[Math.min(tileIndex, tileConfigs.length - 1)];
-          activeTiles?.remove();
+      if (cancelled || !mapNode.current || leafletMap.current) return;
+      const map = leaflet.map(mapNode.current, {
+        zoomControl: true,
+        attributionControl: true,
+        preferCanvas: true,
+      });
+      leafletMap.current = map;
+      const tileConfigs: Array<{ url: string; options: import("leaflet").TileLayerOptions }> = [
+        {
+          url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+          options: { maxZoom: 19, attribution: "Tiles &copy; Esri, OpenStreetMap contributors" },
+        },
+        {
+          url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+          options: { maxZoom: 19, attribution: "&copy; OpenStreetMap contributors" },
+        },
+        {
+          url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
+          options: { maxZoom: 19, subdomains: ["a", "b", "c", "d"], attribution: "&copy; OpenStreetMap contributors &copy; CARTO" },
+        },
+      ];
+      let tileIndex = 0;
+      let activeTiles: import("leaflet").TileLayer | null = null;
+      const addTiles = () => {
+        if (cancelled) return;
+        const config = tileConfigs[Math.min(tileIndex, tileConfigs.length - 1)];
+        activeTiles?.remove();
+        if (fallbackTimer) window.clearTimeout(fallbackTimer);
+        activeTiles = leaflet.tileLayer(config.url, config.options).addTo(map);
+        fallbackTimer = window.setTimeout(() => {
+          if (tileIndex >= tileConfigs.length - 1) return;
+          tileIndex += 1;
+          addTiles();
+        }, 2800);
+        activeTiles.once("tileload", () => {
           if (fallbackTimer) window.clearTimeout(fallbackTimer);
-          activeTiles = leaflet.tileLayer(config.url, config.options).addTo(map);
-          fallbackTimer = window.setTimeout(() => {
-            if (tileIndex >= tileConfigs.length - 1) return;
-            tileIndex += 1;
-            addTiles();
-          }, 2500);
-          activeTiles.on("tileload", () => {
-            if (fallbackTimer) {
-              window.clearTimeout(fallbackTimer);
-              fallbackTimer = null;
-            }
-          });
-          activeTiles.on("tileerror", () => {
-            if (tileIndex >= tileConfigs.length - 1) return;
-            tileIndex += 1;
-            addTiles();
-          });
-        };
-        addTiles();
-        leafletMap.current = map;
-      }
+          fallbackTimer = null;
+        });
+        activeTiles.on("tileerror", () => {
+          if (tileIndex >= tileConfigs.length - 1) return;
+          tileIndex += 1;
+          addTiles();
+        });
+      };
+      addTiles();
+      map.setView(userLocation ? [userLocation.latitude, userLocation.longitude] : [37.5665, 126.978], userLocation ? 14 : 11);
+      setMapReady((value) => value + 1);
       window.requestAnimationFrame(() => map.invalidateSize());
-      window.setTimeout(() => map.invalidateSize(), 350);
+      window.setTimeout(() => map.invalidateSize(), 120);
+      window.setTimeout(() => map.invalidateSize(), 500);
+    });
+    return () => {
+      cancelled = true;
+      if (fallbackTimer) window.clearTimeout(fallbackTimer);
+      markerLayer.current?.remove();
+      leafletMap.current?.remove();
+      markerLayer.current = null;
+      leafletMap.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    import("leaflet").then((leaflet) => {
+      const map = leafletMap.current;
+      if (cancelled || !map || !mapReady) return;
       markerLayer.current?.remove();
       const layer = leaflet.layerGroup().addTo(map);
       markerLayer.current = layer;
@@ -1779,22 +1781,20 @@ function StoreMapView({ stores, statsByStore, userLocation, locationMessage, sel
       } else if (bounds.length) {
         map.fitBounds(leaflet.latLngBounds(bounds), { padding: [28, 28], maxZoom: 15 });
       }
+      window.requestAnimationFrame(() => map.invalidateSize());
     });
     return () => {
       cancelled = true;
     };
-  }, [mapSignature, mappedStores, statsByStore, selectedStoreId, userLocation]);
+  }, [mapReady, mapSignature, mappedStores, statsByStore, selectedStoreId, userLocation, activeStoreId]);
 
   useEffect(() => {
-    if (selectedStoreId && mappedStores.some((store) => store.id === selectedStoreId)) setActiveStoreId(selectedStoreId);
-  }, [selectedStoreId, mappedStores]);
-
-  useEffect(() => () => {
-    markerLayer.current?.remove();
-    leafletMap.current?.remove();
-    markerLayer.current = null;
-    leafletMap.current = null;
-  }, []);
+    if (selectedStoreId && mappedStores.some((store) => store.id === selectedStoreId)) {
+      setActiveStoreId(selectedStoreId);
+      return;
+    }
+    if (!activeStoreId || !mappedStores.some((store) => store.id === activeStoreId)) setActiveStoreId(mappedStores[0]?.id ?? "");
+  }, [selectedStoreId, mappedStores, activeStoreId]);
 
   return (
     <div className="map-page">
@@ -1802,7 +1802,6 @@ function StoreMapView({ stores, statsByStore, userLocation, locationMessage, sel
         <span>담당매장 {stores.length.toLocaleString()}개 · 완료 {completedCount.toLocaleString()}개 · 미완료 {(stores.length - completedCount).toLocaleString()}개</span>
         <span>{locationText}</span>
       </section>
-      {locationMessage && <p className="map-location-message">{locationMessage}</p>}
       <section className="map-panel">
         <div ref={mapNode} className="store-map" />
       </section>
