@@ -466,6 +466,9 @@ function App() {
   useEffect(() => {
     if (view === "workspace" && workspaceMode === "map" && !canUseStoreMap) setWorkspaceMode("list");
   }, [view, workspaceMode, canUseStoreMap]);
+  useEffect(() => {
+    if (view === "workspace") void locateUser();
+  }, [view, workspaceMode, currentRegion]);
   const stats = useMemo(() => summarize(regionItems, photos), [regionItems, photos]);
 
   function askConfirm(options: ConfirmState) {
@@ -1479,13 +1482,12 @@ function StorageModal({ estimate, photoCount, onRefresh, onClose }: { estimate?:
 }
 
 function ConfirmDialog({ state, onClose }: { state: ConfirmState; onClose: (value: boolean) => void }) {
+  const message = [state.title, state.message].filter(Boolean).join("\n");
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true">
       <section className="modal confirm-dialog">
-        {!state.plain && <div className="confirm-icon" aria-hidden="true">{state.danger ? "!" : "✓"}</div>}
-        {state.title && <h2>{state.title}</h2>}
         <div className="confirm-message">
-          {state.message.split("\n").map((line, index) => <p key={`${line}-${index}`}>{line || "\u00a0"}</p>)}
+          {message.split("\n").map((line, index) => <p key={`${line}-${index}`}>{line || "\u00a0"}</p>)}
         </div>
         <div className="confirm-actions">
           <button onClick={() => onClose(false)}>{state.cancelText ?? "취소"}</button>
@@ -1664,13 +1666,27 @@ function StoreMapView({ stores, statsByStore, userLocation, locationMessage, sel
       if (cancelled || !mapNode.current) return;
       const map = leafletMap.current ?? leaflet.map(mapNode.current, { zoomControl: true, attributionControl: true });
       if (!leafletMap.current) {
-        leaflet.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        const primaryTiles = leaflet.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+          maxZoom: 19,
+          subdomains: "abcd",
+          attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+        });
+        const fallbackTiles = leaflet.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
           maxZoom: 19,
           attribution: "&copy; OpenStreetMap contributors",
-        }).addTo(map);
+        });
+        let fallbackStarted = false;
+        primaryTiles.on("tileerror", () => {
+          if (fallbackStarted) return;
+          fallbackStarted = true;
+          primaryTiles.remove();
+          fallbackTiles.addTo(map);
+        });
+        primaryTiles.addTo(map);
         leafletMap.current = map;
       }
       window.requestAnimationFrame(() => map.invalidateSize());
+      window.setTimeout(() => map.invalidateSize(), 350);
       markerLayer.current?.remove();
       const layer = leaflet.layerGroup().addTo(map);
       markerLayer.current = layer;

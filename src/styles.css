@@ -642,8 +642,10 @@ textarea { min-height: 110px; resize: vertical; }
   font-weight: 800;
 }
 .confirm-dialog {
-  width: min(430px, calc(100vw - 28px));
+  width: min(420px, calc(100vw - 32px));
   text-align: left;
+  margin: 0 auto;
+  padding: 24px;
 }
 .confirm-icon {
   width: 34px;
@@ -662,9 +664,9 @@ textarea { min-height: 110px; resize: vertical; }
 }
 .confirm-message {
   display: grid;
-  gap: 2px;
+  gap: 4px;
   color: #334155;
-  font-weight: 700;
+  font-weight: 800;
   line-height: 1.45;
 }
 .confirm-message p {
