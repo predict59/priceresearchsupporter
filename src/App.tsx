@@ -1,4 +1,4 @@
-import { Camera, CheckCircle2, ChevronDown, ChevronUp, Download, MapPin, Menu, MoreVertical, Phone, SlidersHorizontal, Search, Upload, X } from "lucide-react";
+import { Camera, CheckCircle2, ChevronDown, ChevronUp, Download, Menu, MoreVertical, Phone, SlidersHorizontal, Search, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import { clearAllData, deletePhoto, getItems, getPhotos, getPhotosByRegion, getPhotosByStore, getRegions, getSettings, getStores, importAllData, importRegionData, now, putItem, putPhoto, putStore, saveParsedData, saveSettings, today, uid } from "./db";
@@ -38,7 +38,7 @@ const PHOTO_TARGET_BYTES = 950 * 1024;
 const PHOTO_MIN_EDGE = 760;
 const PHOTO_QUALITY_STEPS = [0.72, 0.64, 0.56, 0.48, 0.4, 0.32];
 const PRICE_DIFF_WARN_PERCENT = 30;
-const TARGET_MAP_URL = "https://www.google.com/maps/d/u/1/viewer?mid=1ej99Lo6WS4GROBCQPr0a66MhQR_vXuM&ll=37.49945198941339%2C127.04262669775987&z=14";
+const TARGET_MAP_URL = "https://www.google.com/maps/d/u/1/edit?mid=1ej99Lo6WS4GROBCQPr0a66MhQR_vXuM&usp=sharing";
 type PriceCandidate = { value: number; score: number; source: "comma" | "plain" };
 const PRICE_KEYWORDS = /원|가격|정상|판매|할인|행사|특가|세일|SALE|sale|올리브|카드|멤버십|회원|쿠폰/;
 const PRICE_MAX_VALUE = 999999;
@@ -449,6 +449,7 @@ function App() {
     () => sortedRegionStores.filter((store) => store.mapIncluded !== false),
     [sortedRegionStores],
   );
+  const canUseStoreMap = Boolean(userLocation) && assignedRegionStores.some(hasStoreCoordinates);
   const assignmentVisibleStores = useMemo(() => {
     const query = storeQuery.trim();
     if (!query) return sortedRegionStores;
@@ -468,6 +469,9 @@ function App() {
     setStoreStatusDraft(selectedStore?.frontPhotoId ? selectedStore.operatingStatus ?? "" : "");
     setStoreStatusMessage("");
   }, [selectedStore?.id, selectedStore?.frontPhotoId, selectedStore?.operatingStatus]);
+  useEffect(() => {
+    if (view === "workspace" && workspaceMode === "map" && !canUseStoreMap) setWorkspaceMode("list");
+  }, [view, workspaceMode, canUseStoreMap]);
   const stats = useMemo(() => summarize(regionItems, photos), [regionItems, photos]);
 
   function askConfirm(options: ConfirmState) {
@@ -690,18 +694,6 @@ function App() {
   }
 
   async function chooseRegion(region: string) {
-    const assigned = stores.filter((store) => store.region === region && store.mapIncluded !== false);
-    const missingCoordinates = assigned.filter((store) => !hasStoreCoordinates(store)).length;
-    if (missingCoordinates > 0) {
-      const ok = await askConfirm({
-        title: "위치정보 확인",
-        message: `담당매장 중 위치정보가 없는 매장이 ${missingCoordinates.toLocaleString()}개 있습니다.\n위치정보가 없으면 매장지도와 거리순 정렬을 사용할 수 없거나 일부 매장이 보이지 않을 수 있습니다.\n그래도 작업을 시작할까요?`,
-        confirmText: "작업 시작",
-        cancelText: "취소",
-        plain: true,
-      });
-      if (!ok) return;
-    }
     const nextSettings = { ...settings, currentRegion: region };
     setSettingsState(nextSettings);
     setSelectedStoreId("");
@@ -1161,7 +1153,7 @@ function App() {
                 <span>최근 지역</span>
                 <button onClick={() => chooseRegion(currentRegion)}>{currentRegion}</button>
               </div>
-              <a className="mini-map-link" target="_blank" href={TARGET_MAP_URL}>조사처 전체지도</a>
+              <a className="mini-map-link" target="_blank" href={TARGET_MAP_URL}>조사처 전체 지도 확인</a>
             </div>
           )}
           <div className="grid">
@@ -1196,29 +1188,32 @@ function App() {
 
       {view === "workspace" && currentRegion && (
         <main className="page">
-          <div className="sticky-search workspace-search">
-            <SearchBox value={storeQuery} onChange={setStoreQuery} placeholder="매장명 / 주소 / 품목명 / 품목코드 / 바코드" />
-            {workspaceMode === "list" && <button className="tool-toggle" onClick={() => setWorkspaceToolsOpen((value) => !value)} aria-expanded={workspaceToolsOpen}>
-              <SlidersHorizontal size={18} /> 필터 {workspaceToolsOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-            </button>}
-          </div>
           <nav className="workspace-tabs" aria-label="매장 보기 방식">
             <button type="button" className={workspaceMode === "list" ? "active" : ""} onClick={() => setWorkspaceMode("list")}>매장 리스트</button>
-            <button type="button" className={workspaceMode === "map" ? "active" : ""} onClick={() => setWorkspaceMode("map")}>매장 지도</button>
+            <button type="button" className={workspaceMode === "map" ? "active" : ""} onClick={() => canUseStoreMap && setWorkspaceMode("map")} disabled={!canUseStoreMap}>매장 지도</button>
           </nav>
+          {workspaceMode === "list" && (
+            <div className="sticky-search workspace-search">
+              <SearchBox value={storeQuery} onChange={setStoreQuery} placeholder="매장명 / 주소 / 품목명 / 품목코드 / 바코드" />
+              <button className="tool-toggle" onClick={() => setWorkspaceToolsOpen((value) => !value)} aria-expanded={workspaceToolsOpen}>
+                <SlidersHorizontal size={18} /> 필터 {workspaceToolsOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              </button>
+            </div>
+          )}
           {workspaceToolsOpen && workspaceMode === "list" && (
             <section className="tool-panel">
-              <FilterBar filter={filter} setFilter={setFilter} />
-              <label className="sort-control sort-only">
+              <div className="store-filter-sort-row">
+                <FilterBar filter={filter} setFilter={setFilter} values={["전체", "미완료", "완료", "사진누락"]} />
+                <label className="sort-control sort-only">
                 <select value={storeSort} onChange={(event) => setStoreSort(event.target.value as StoreSort)}>
                   <option>이름 순</option>
-                  <option>미완료 많은 순</option>
                   <option>품목 많은 순</option>
+                  <option>미완료 많은 순</option>
                   <option>임의 지정 순</option>
                   <option disabled={!userLocation || !assignedRegionStores.some(hasStoreCoordinates)}>거리 순</option>
                 </select>
-              </label>
-              <button type="button" className="order-edit-toggle" onClick={locateUser}>내 위치 확인</button>
+                </label>
+              </div>
               {storeSort === "거리 순" && (!userLocation || !assignedRegionStores.some(hasStoreCoordinates)) && <p className="small-help warn">거리순은 내 위치와 매장 위치정보가 있을 때 사용할 수 있습니다.</p>}
               {storeSort === "임의 지정 순" && (
                 <button
@@ -1269,11 +1264,13 @@ function App() {
               userLocation={userLocation}
               locationMessage={locationMessage}
               onLocate={locateUser}
+              selectedStoreId={selectedStoreId}
               onOpen={(store) => openStore(store)}
               onContacts={(store) => setContactStoreId(store.id)}
               onToggle={(store) => setStoreAssigned(store, false)}
             />
           )}
+          <button type="button" className="location-fab" onClick={locateUser}>내 위치</button>
         </main>
       )}
 
@@ -1556,8 +1553,8 @@ function ConfirmDialog({ state, onClose }: { state: ConfirmState; onClose: (valu
   );
 }
 
-function FilterBar({ filter, setFilter }: { filter: Filter; setFilter: (filter: Filter) => void }) {
-  return <div className="segmented filter-chips">{(["전체", "미완료", "미조사", "조사중", "완료", "사진누락"] as Filter[]).map((value) => <button className={filter === value ? "active" : ""} key={value} onClick={() => setFilter(value)}>{value}</button>)}</div>;
+function FilterBar({ filter, setFilter, values = ["전체", "미완료", "미조사", "조사중", "완료", "사진누락"] }: { filter: Filter; setFilter: (filter: Filter) => void; values?: Filter[] }) {
+  return <div className="segmented filter-chips">{values.map((value) => <button className={filter === value ? "active" : ""} key={value} onClick={() => setFilter(value)}>{value}</button>)}</div>;
 }
 
 function Stats({ stats, totalLabel = "전체" }: { stats: RegionStats; totalLabel?: string }) {
@@ -1636,6 +1633,18 @@ function isStoreComplete(store: SurveyStore, stats: RegionStats) {
   return Boolean(store.frontPhotoId) && stats.total > 0 && stats.completed === stats.total;
 }
 
+function StoreMoreMenu({ store, onAssignToggle }: { store: SurveyStore; onAssignToggle: () => void }) {
+  return (
+    <details className="card-menu">
+      <summary aria-label="매장 메뉴"><MoreVertical size={18} /></summary>
+      <div className="menu-popover">
+        <button type="button" onClick={onAssignToggle}>{store.mapIncluded === false ? "담당매장 포함" : "담당매장 제외"}</button>
+        {mapLinks(store.storeAddress).map(([name, href]) => <a key={name} href={href} target="_blank">{name} 지도 보기</a>)}
+      </div>
+    </details>
+  );
+}
+
 function StoreCard({
   store,
   stats,
@@ -1702,13 +1711,7 @@ function StoreCard({
           <h2 className="store-card-title" title={store.storeName}><span className="store-name-text">{store.storeName}</span><span className={`operating-badge small ${displayOperatingStatus === "미확인" ? "unknown" : operatingClass(displayOperatingStatus as StoreOperatingStatus)}`}>{displayOperatingStatus}</span></h2>
           <p>{store.storeAddress || "주소 없음"}</p>
         </div>
-        <details className="card-menu">
-          <summary aria-label="매장 메뉴"><MoreVertical size={18} /></summary>
-          <div className="menu-popover">
-            <button type="button" onClick={onAssignToggle}><MapPin size={15} />{store.mapIncluded === false ? "담당매장 포함" : "담당매장 제외"}</button>
-            {mapLinks(store.storeAddress).map(([name, href]) => <a key={name} href={href} target="_blank"><MapPin size={15} />{name} 지도</a>)}
-          </div>
-        </details>
+        <StoreMoreMenu store={store} onAssignToggle={onAssignToggle} />
       </div>
       {store.mapIncluded === false && <span className="map-excluded-badge">담당 제외</span>}
       <div className="store-progress">
@@ -1731,47 +1734,55 @@ function StoreCard({
   );
 }
 
-function StoreMapView({ region, stores, statsByStore, userLocation, locationMessage, onLocate, onOpen, onContacts, onToggle }: { region: string; stores: SurveyStore[]; statsByStore: Map<string, RegionStats>; userLocation: { latitude: number; longitude: number } | null; locationMessage: string; onLocate: () => Promise<{ latitude: number; longitude: number } | null>; onOpen: (store: SurveyStore) => void; onContacts: (store: SurveyStore) => void; onToggle: (store: SurveyStore) => void | Promise<void> }) {
+function StoreMapView({ region, stores, statsByStore, userLocation, locationMessage, selectedStoreId, onOpen, onContacts, onToggle }: { region: string; stores: SurveyStore[]; statsByStore: Map<string, RegionStats>; userLocation: { latitude: number; longitude: number } | null; locationMessage: string; selectedStoreId: string; onLocate: () => Promise<{ latitude: number; longitude: number } | null>; onOpen: (store: SurveyStore) => void; onContacts: (store: SurveyStore) => void; onToggle: (store: SurveyStore) => void | Promise<void> }) {
   const mapNode = useRef<HTMLDivElement | null>(null);
-  const [activeStoreId, setActiveStoreId] = useState(stores.find(hasStoreCoordinates)?.id ?? "");
+  const leafletMap = useRef<import("leaflet").Map | null>(null);
+  const markerLayer = useRef<import("leaflet").LayerGroup | null>(null);
   const mappedStores = stores.filter(hasStoreCoordinates);
+  const initialActiveId = selectedStoreId && mappedStores.some((store) => store.id === selectedStoreId) ? selectedStoreId : mappedStores[0]?.id ?? "";
+  const [activeStoreId, setActiveStoreId] = useState(initialActiveId);
   const missingStores = stores.filter((store) => !hasStoreCoordinates(store));
   const activeStore = stores.find((store) => store.id === activeStoreId);
   const completedCount = stores.filter((store) => isStoreComplete(store, statsByStore.get(store.id) ?? emptyStats)).length;
-  const mapBlocked = !userLocation || mappedStores.length === 0;
   const mapSignature = [
     mappedStores.map((store) => `${store.id}:${store.latitude}:${store.longitude}:${isStoreComplete(store, statsByStore.get(store.id) ?? emptyStats) ? "1" : "0"}`).join("|"),
-    activeStoreId,
     userLocation ? `${userLocation.latitude}:${userLocation.longitude}` : "",
   ].join("::");
 
   useEffect(() => {
     let cancelled = false;
-    let map: import("leaflet").Map | undefined;
     import("leaflet").then((leaflet) => {
       if (cancelled || !mapNode.current) return;
-      map = leaflet.map(mapNode.current, { zoomControl: true, attributionControl: true });
-      leaflet.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution: "&copy; OpenStreetMap contributors",
-      }).addTo(map);
+      const map = leafletMap.current ?? leaflet.map(mapNode.current, { zoomControl: true, attributionControl: true });
+      if (!leafletMap.current) {
+        leaflet.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          maxZoom: 19,
+          attribution: "&copy; OpenStreetMap contributors",
+        }).addTo(map);
+        leafletMap.current = map;
+      }
+      markerLayer.current?.remove();
+      const layer = leaflet.layerGroup().addTo(map);
+      markerLayer.current = layer;
       const bounds: import("leaflet").LatLngExpression[] = [];
       mappedStores.forEach((store) => {
         const stats = statsByStore.get(store.id) ?? emptyStats;
         const completed = isStoreComplete(store, stats);
-        const selected = store.id === activeStoreId;
         const latLng: import("leaflet").LatLngExpression = [store.latitude!, store.longitude!];
         bounds.push(latLng);
         leaflet.circleMarker(latLng, {
-          radius: selected ? 11 : 9,
-          color: selected ? "#2563eb" : completed ? "#6b7280" : "#dc2626",
-          weight: selected ? 4 : 2,
-          fillColor: selected ? "#3b82f6" : completed ? "#9ca3af" : "#ef4444",
+          radius: 9,
+          color: completed ? "#6b7280" : "#dc2626",
+          weight: 2,
+          fillColor: completed ? "#9ca3af" : "#ef4444",
           fillOpacity: 0.82,
         })
-          .addTo(map!)
+          .addTo(layer)
           .bindTooltip(`${store.storeName} · ${completed ? "완료" : "미완료"}`)
-          .on("click", () => setActiveStoreId(store.id));
+          .on("click", () => {
+            setActiveStoreId(store.id);
+            map.setView(latLng, Math.max(map.getZoom(), 15), { animate: true });
+          });
       });
       if (userLocation) {
         const latLng: import("leaflet").LatLngExpression = [userLocation.latitude, userLocation.longitude];
@@ -1782,17 +1793,32 @@ function StoreMapView({ region, stores, statsByStore, userLocation, locationMess
           weight: 3,
           fillColor: "#38bdf8",
           fillOpacity: 0.9,
-        }).addTo(map).bindTooltip("내 위치");
+        }).addTo(layer).bindTooltip("내 위치");
       }
-      if (userLocation) map.setView([userLocation.latitude, userLocation.longitude], 14);
-      else if (bounds.length) map.fitBounds(leaflet.latLngBounds(bounds), { padding: [28, 28], maxZoom: 15 });
-      else map.setView([36.5, 127.8], 7);
+      const selectedStore = mappedStores.find((store) => store.id === selectedStoreId) ?? mappedStores.find((store) => store.id === activeStoreId);
+      if (selectedStore) {
+        map.setView([selectedStore.latitude!, selectedStore.longitude!], Math.max(map.getZoom(), 15));
+      } else if (userLocation) {
+        map.setView([userLocation.latitude, userLocation.longitude], Math.max(map.getZoom(), 14));
+      } else if (bounds.length) {
+        map.fitBounds(leaflet.latLngBounds(bounds), { padding: [28, 28], maxZoom: 15 });
+      }
     });
     return () => {
       cancelled = true;
-      map?.remove();
     };
-  }, [mapSignature, mappedStores, statsByStore, activeStoreId, userLocation]);
+  }, [mapSignature, mappedStores, statsByStore, selectedStoreId, userLocation]);
+
+  useEffect(() => {
+    if (selectedStoreId && mappedStores.some((store) => store.id === selectedStoreId)) setActiveStoreId(selectedStoreId);
+  }, [selectedStoreId, mappedStores]);
+
+  useEffect(() => () => {
+    markerLayer.current?.remove();
+    leafletMap.current?.remove();
+    markerLayer.current = null;
+    leafletMap.current = null;
+  }, []);
 
   return (
     <div className="map-page">
@@ -1801,22 +1827,11 @@ function StoreMapView({ region, stores, statsByStore, userLocation, locationMess
           <strong>{region}</strong>
           <span>담당매장 {stores.length.toLocaleString()}개 · 완료 {completedCount.toLocaleString()}개 · 미완료 {(stores.length - completedCount).toLocaleString()}개</span>
         </div>
-        <div className="map-summary-actions">
-          <button type="button" onClick={onLocate}>내 위치 확인</button>
-        </div>
       </section>
       {locationMessage && <p className="map-location-message">{locationMessage}</p>}
-      {mapBlocked ? (
-        <section className="panel map-blocked">
-          <h2>매장지도를 보려면 위치정보가 필요합니다.</h2>
-          <p>담당매장 설정에서 매장 위치정보를 가져오고, 내 위치 확인을 허용하면 지도를 볼 수 있습니다.</p>
-          <button type="button" className="primary" onClick={onLocate}>내 위치 확인</button>
-        </section>
-      ) : (
-        <section className="map-panel">
-          <div ref={mapNode} className="store-map" />
-        </section>
-      )}
+      <section className="map-panel">
+        <div ref={mapNode} className="store-map" />
+      </section>
       <section className="panel map-active-panel">
         {activeStore ? (
           <>
@@ -1829,7 +1844,7 @@ function StoreMapView({ region, stores, statsByStore, userLocation, locationMess
             <div className="map-active-actions">
               <button type="button" onClick={() => onContacts(activeStore)}>담당자 정보</button>
               <button type="button" className="primary" onClick={() => onOpen(activeStore)}>입력</button>
-              <button type="button" onClick={() => onToggle(activeStore)}>담당매장 제외</button>
+              <StoreMoreMenu store={activeStore} onAssignToggle={() => onToggle(activeStore)} />
             </div>
           </>
         ) : (
