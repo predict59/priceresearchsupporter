@@ -481,9 +481,9 @@ textarea { min-height: 110px; resize: vertical; }
 }
 .item-badge-stack .badge-photo-missing,
 .item-badge-stack .badge-사진누락 {
-  background: #ef4444;
-  color: #fff;
-  border: 1px solid #ef4444;
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
   font-weight: 900;
 }
 .warn { color: #b91c1c; }
