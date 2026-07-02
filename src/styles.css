@@ -1978,6 +1978,16 @@ textarea { min-height: 110px; resize: vertical; }
   position: relative;
   overflow: visible;
 }
+.map-active-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  overflow: visible;
+}
+.map-active-head > div {
+  min-width: 0;
+}
 .map-active-panel h2 {
   margin-bottom: 6px;
   overflow: hidden;
@@ -1990,14 +2000,15 @@ textarea { min-height: 110px; resize: vertical; }
 }
 .map-active-actions {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 8px;
 }
-.map-active-actions .card-menu summary {
-  width: 40px;
-  height: 40px;
-  border: 0;
-  border-radius: 999px;
+.map-active-head .card-menu {
+  z-index: 12;
+}
+.map-active-head .menu-popover {
+  top: 38px;
+  z-index: 40;
 }
 .map-active-stat {
   display: inline-flex;

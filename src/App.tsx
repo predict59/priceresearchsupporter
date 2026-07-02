@@ -1686,9 +1686,16 @@ function StoreMapView({ stores, statsByStore, userLocation, locationMessage, sel
       if (cancelled || !mapNode.current) return;
       const map = leafletMap.current ?? leaflet.map(mapNode.current, { zoomControl: true, attributionControl: true });
       if (!leafletMap.current) {
-        const tileConfigs = [
+        const tileConfigs: Array<{ url: string; options: import("leaflet").TileLayerOptions }> = [
           {
-            url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+            url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+            options: {
+              maxZoom: 19,
+              attribution: "Tiles &copy; Esri &mdash; Sources: Esri, OpenStreetMap contributors",
+            },
+          },
+          {
+            url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
             options: { maxZoom: 19, attribution: "&copy; OpenStreetMap contributors" },
           },
           {
@@ -1699,13 +1706,26 @@ function StoreMapView({ stores, statsByStore, userLocation, locationMessage, sel
             url: "https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png",
             options: { maxZoom: 19, attribution: "&copy; OpenStreetMap contributors, Tiles style by HOT" },
           },
-        ] as const;
+        ];
         let tileIndex = 0;
         let activeTiles: import("leaflet").TileLayer | null = null;
+        let fallbackTimer: ReturnType<typeof window.setTimeout> | null = null;
         const addTiles = () => {
           const config = tileConfigs[Math.min(tileIndex, tileConfigs.length - 1)];
           activeTiles?.remove();
+          if (fallbackTimer) window.clearTimeout(fallbackTimer);
           activeTiles = leaflet.tileLayer(config.url, config.options).addTo(map);
+          fallbackTimer = window.setTimeout(() => {
+            if (tileIndex >= tileConfigs.length - 1) return;
+            tileIndex += 1;
+            addTiles();
+          }, 2500);
+          activeTiles.on("tileload", () => {
+            if (fallbackTimer) {
+              window.clearTimeout(fallbackTimer);
+              fallbackTimer = null;
+            }
+          });
           activeTiles.on("tileerror", () => {
             if (tileIndex >= tileConfigs.length - 1) return;
             tileIndex += 1;
@@ -1789,16 +1809,20 @@ function StoreMapView({ stores, statsByStore, userLocation, locationMessage, sel
       <section className="panel map-active-panel">
         {activeStore ? (
           <>
-            {(() => {
-              const stats = statsByStore.get(activeStore.id) ?? emptyStats;
-              return <span className="map-active-stat">물품 {stats.completed.toLocaleString()}/{stats.total.toLocaleString()} · {isStoreComplete(activeStore, stats) ? "완료" : "미완료"}</span>;
-            })()}
-            <h2>{activeStore.storeName}</h2>
+            <div className="map-active-head">
+              <div>
+                {(() => {
+                  const stats = statsByStore.get(activeStore.id) ?? emptyStats;
+                  return <span className="map-active-stat">물품 {stats.completed.toLocaleString()}/{stats.total.toLocaleString()} · {isStoreComplete(activeStore, stats) ? "완료" : "미완료"}</span>;
+                })()}
+                <h2 title={activeStore.storeName}>{activeStore.storeName}</h2>
+              </div>
+              <StoreMoreMenu store={activeStore} onAssignToggle={() => onToggle(activeStore)} />
+            </div>
             <p>{activeStore.storeAddress || "주소 없음"}</p>
             <div className="map-active-actions">
               <button type="button" onClick={() => onContacts(activeStore)}>담당자 정보</button>
               <button type="button" className="primary" onClick={() => onOpen(activeStore)}>입력</button>
-              <StoreMoreMenu store={activeStore} onAssignToggle={() => onToggle(activeStore)} />
             </div>
           </>
         ) : (
