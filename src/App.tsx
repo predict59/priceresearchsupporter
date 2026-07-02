@@ -527,7 +527,7 @@ function App() {
           locatingRef.current = false;
           resolve(null);
         },
-        { enableHighAccuracy: false, timeout: 6000, maximumAge: 30000 },
+        { enableHighAccuracy: false, timeout: 3000, maximumAge: 300000 },
       );
     });
   }
@@ -1682,16 +1682,16 @@ function StoreMapView({ stores, statsByStore, userLocation, selectedStoreId, onO
       leafletMap.current = map;
       const tileConfigs: Array<{ url: string; options: import("leaflet").TileLayerOptions }> = [
         {
-          url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
-          options: { maxZoom: 19, attribution: "Tiles &copy; Esri, OpenStreetMap contributors" },
-        },
-        {
           url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
           options: { maxZoom: 19, attribution: "&copy; OpenStreetMap contributors" },
         },
         {
           url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
           options: { maxZoom: 19, subdomains: ["a", "b", "c", "d"], attribution: "&copy; OpenStreetMap contributors &copy; CARTO" },
+        },
+        {
+          url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+          options: { maxZoom: 13, attribution: "Tiles &copy; Esri, OpenStreetMap contributors" },
         },
       ];
       let tileIndex = 0;
@@ -1718,7 +1718,7 @@ function StoreMapView({ stores, statsByStore, userLocation, selectedStoreId, onO
         });
       };
       addTiles();
-      map.setView(userLocation ? [userLocation.latitude, userLocation.longitude] : [37.5665, 126.978], userLocation ? 14 : 11);
+      map.setView(userLocation ? [userLocation.latitude, userLocation.longitude] : [37.5665, 126.978], userLocation ? 13 : 11);
       setMapReady((value) => value + 1);
       window.requestAnimationFrame(() => map.invalidateSize());
       window.setTimeout(() => map.invalidateSize(), 120);
@@ -1759,7 +1759,7 @@ function StoreMapView({ stores, statsByStore, userLocation, selectedStoreId, onO
           .bindTooltip(`${store.storeName} · ${completed ? "완료" : "미완료"}`)
           .on("click", () => {
             setActiveStoreId(store.id);
-            map.setView(latLng, Math.max(map.getZoom(), 15), { animate: true });
+            map.setView(latLng, Math.min(Math.max(map.getZoom(), 13), 14), { animate: true });
           });
       });
       if (userLocation) {
@@ -1775,11 +1775,11 @@ function StoreMapView({ stores, statsByStore, userLocation, selectedStoreId, onO
       }
       const selectedStore = mappedStores.find((store) => store.id === selectedStoreId) ?? mappedStores.find((store) => store.id === activeStoreId);
       if (selectedStore) {
-        map.setView([selectedStore.latitude!, selectedStore.longitude!], Math.max(map.getZoom(), 15));
+        map.setView([selectedStore.latitude!, selectedStore.longitude!], Math.min(Math.max(map.getZoom(), 13), 14));
       } else if (userLocation) {
-        map.setView([userLocation.latitude, userLocation.longitude], Math.max(map.getZoom(), 14));
+        map.setView([userLocation.latitude, userLocation.longitude], Math.min(Math.max(map.getZoom(), 13), 14));
       } else if (bounds.length) {
-        map.fitBounds(leaflet.latLngBounds(bounds), { padding: [28, 28], maxZoom: 15 });
+        map.fitBounds(leaflet.latLngBounds(bounds), { padding: [28, 28], maxZoom: 13 });
       }
       window.requestAnimationFrame(() => map.invalidateSize());
     });
