@@ -1,6 +1,5 @@
 import { Camera, CheckCircle2, ChevronDown, ChevronUp, Download, Menu, MoreVertical, Phone, SlidersHorizontal, Search, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { DragEvent } from "react";
 import { clearAllData, deletePhoto, getItems, getPhotos, getPhotosByRegion, getPhotosByStore, getRegions, getSettings, getStores, importAllData, importRegionData, now, putItem, putPhoto, putStore, saveParsedData, saveSettings, today, uid } from "./db";
 import { parseContactRows, parseSurveyWorkbook, mergeContacts, rebuildStoresAndRegions } from "./excel";
 import { dataUrlToBlob, exportBackup, exportRegionExcel, exportRegionZip } from "./exporters";
@@ -9,7 +8,7 @@ import type { AppSettings, BackupPayload, PhotoType, Region, RegionStats, StoreO
 
 type View = "upload" | "regions" | "assignment" | "workspace" | "store" | "items" | "item" | "backup" | "validation";
 type Filter = "전체" | "미완료" | "미조사" | "조사중" | "완료" | "사진누락";
-type StoreSort = "이름 순" | "품목 많은 순" | "미완료 많은 순" | "임의 지정 순" | "거리 순";
+type StoreSort = "이름 순" | "품목 많은 순" | "미완료 많은 순" | "거리 순";
 type WorkspaceMode = "list" | "map";
 type ConfirmState = {
   title: string;
@@ -373,8 +372,6 @@ function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [storeSort, setStoreSort] = useState<StoreSort>("이름 순");
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("list");
-  const [orderEditing, setOrderEditing] = useState(false);
-  const [dragStoreId, setDragStoreId] = useState("");
   const [workspaceToolsOpen, setWorkspaceToolsOpen] = useState(false);
   const [itemToolsOpen, setItemToolsOpen] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
@@ -409,13 +406,10 @@ function App() {
     regionStores.forEach((store) => map.set(store.id, summarize(regionItemsByStore.get(store.id) ?? [], photosByStore.get(store.id) ?? [])));
     return map;
   }, [regionStores, regionItemsByStore, photosByStore]);
-  const storeVisitCompare = (a: SurveyStore, b: SurveyStore) =>
-    (a.visitOrder ?? 999999) - (b.visitOrder ?? 999999) || `${a.storeAddress} ${a.storeName}`.localeCompare(`${b.storeAddress} ${b.storeName}`, "ko");
   const sortedRegionStores = useMemo(() => {
     return [...regionStores].sort((a, b) => {
       const as = regionStatsByStore.get(a.id) ?? emptyStats;
       const bs = regionStatsByStore.get(b.id) ?? emptyStats;
-      if (storeSort === "임의 지정 순") return storeVisitCompare(a, b);
       if (storeSort === "거리 순" && userLocation) {
         const ad = hasStoreCoordinates(a) ? distanceKm(userLocation, { latitude: a.latitude!, longitude: a.longitude! }) : Number.POSITIVE_INFINITY;
         const bd = hasStoreCoordinates(b) ? distanceKm(userLocation, { latitude: b.latitude!, longitude: b.longitude! }) : Number.POSITIVE_INFINITY;
@@ -611,20 +605,6 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (view !== "workspace") {
-      setOrderEditing(false);
-      setDragStoreId("");
-    }
-  }, [view]);
-
-  useEffect(() => {
-    if (storeSort !== "임의 지정 순") {
-      setOrderEditing(false);
-      setDragStoreId("");
-    }
-  }, [storeSort]);
-
-  useEffect(() => {
     if (storeSort === "거리 순" && (!userLocation || !assignedRegionStores.some(hasStoreCoordinates))) {
       setStoreSort("이름 순");
     }
@@ -703,8 +683,6 @@ function App() {
     setFilter("전체");
     setStoreSort("이름 순");
     setWorkspaceMode("list");
-    setOrderEditing(false);
-    setDragStoreId("");
     setPhotosReady(false);
     setPhotos([]);
     setView("workspace");
@@ -757,35 +735,6 @@ function App() {
     setSettingsState(nextSettings);
     setView("store");
     saveSettings(nextSettings);
-  }
-
-  async function saveVisitOrder(store: SurveyStore, value: string) {
-    const order = Number(value.replace(/\D/g, ""));
-    await putStore({ ...store, visitOrder: order || undefined, updatedAt: now() });
-    await refresh(store.region);
-  }
-
-  async function moveVisitOrder(store: SurveyStore, direction: -1 | 1) {
-    const ordered = [...regionStores].sort(storeVisitCompare);
-    const index = ordered.findIndex((candidate) => candidate.id === store.id);
-    const nextIndex = index + direction;
-    if (index < 0 || nextIndex < 0 || nextIndex >= ordered.length) return;
-    [ordered[index], ordered[nextIndex]] = [ordered[nextIndex], ordered[index]];
-    await Promise.all(ordered.map((candidate, orderIndex) => putStore({ ...candidate, visitOrder: orderIndex + 1, updatedAt: now() })));
-    await refresh(store.region);
-  }
-
-  async function reorderVisitOrder(draggedId: string, targetId: string) {
-    if (!draggedId || draggedId === targetId) return;
-    const ordered = [...regionStores].sort(storeVisitCompare);
-    const from = ordered.findIndex((candidate) => candidate.id === draggedId);
-    const to = ordered.findIndex((candidate) => candidate.id === targetId);
-    if (from < 0 || to < 0) return;
-    const [moved] = ordered.splice(from, 1);
-    ordered.splice(to, 0, moved);
-    await Promise.all(ordered.map((candidate, orderIndex) => putStore({ ...candidate, visitOrder: orderIndex + 1, updatedAt: now() })));
-    setDragStoreId("");
-    await refresh(currentRegion);
   }
 
   async function setStoreAssigned(store: SurveyStore, assigned: boolean) {
@@ -1187,7 +1136,7 @@ function App() {
       )}
 
       {view === "workspace" && currentRegion && (
-        <main className="page">
+        <main className="page workspace-page">
           <nav className="workspace-tabs" aria-label="매장 보기 방식">
             <button type="button" className={workspaceMode === "list" ? "active" : ""} onClick={() => setWorkspaceMode("list")}>매장 리스트</button>
             <button type="button" className={workspaceMode === "map" ? "active" : ""} onClick={() => canUseStoreMap && setWorkspaceMode("map")} disabled={!canUseStoreMap}>매장 지도</button>
@@ -1209,20 +1158,11 @@ function App() {
                   <option>이름 순</option>
                   <option>품목 많은 순</option>
                   <option>미완료 많은 순</option>
-                  <option>임의 지정 순</option>
                   <option disabled={!userLocation || !assignedRegionStores.some(hasStoreCoordinates)}>거리 순</option>
                 </select>
                 </label>
               </div>
               {storeSort === "거리 순" && (!userLocation || !assignedRegionStores.some(hasStoreCoordinates)) && <p className="small-help warn">거리순은 내 위치와 매장 위치정보가 있을 때 사용할 수 있습니다.</p>}
-              {storeSort === "임의 지정 순" && (
-                <button
-                  className={`order-edit-toggle ${orderEditing ? "active" : ""}`}
-                  onClick={() => setOrderEditing((value) => !value)}
-                >
-                  순서 편집
-                </button>
-              )}
             </section>
           )}
           {workspaceMode === "list" && (
@@ -1238,19 +1178,10 @@ function App() {
                   stats={ownStats}
                   items={ownItems}
                   focused={selectedStoreId === store.id}
-                  orderEditing={orderEditing}
-                  dragging={dragStoreId === store.id}
                   onOpen={() => openStore(store)}
                   onContacts={() => setContactStoreId(store.id)}
                   onAssignToggle={() => setStoreAssigned(store, store.mapIncluded === false)}
                   distanceText={userLocation && hasStoreCoordinates(store) ? formatDistance(distanceKm(userLocation, { latitude: store.latitude!, longitude: store.longitude! })) : ""}
-                  onOrderChange={(value) => saveVisitOrder(store, value)}
-                  onMoveUp={() => moveVisitOrder(store, -1)}
-                  onMoveDown={() => moveVisitOrder(store, 1)}
-                  onDragStart={() => setDragStoreId(store.id)}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={() => reorderVisitOrder(dragStoreId, store.id)}
-                  onDragEnd={() => setDragStoreId("")}
                 />
               );
             })}
@@ -1258,7 +1189,6 @@ function App() {
           )}
           {workspaceMode === "map" && (
             <StoreMapView
-              region={currentRegion}
               stores={assignedRegionStores}
               statsByStore={regionStatsByStore}
               userLocation={userLocation}
@@ -1650,36 +1580,18 @@ function StoreCard({
   stats,
   items,
   focused,
-  orderEditing,
-  dragging,
   onOpen,
   onContacts,
   onAssignToggle,
-  onOrderChange,
-  onMoveUp,
-  onMoveDown,
-  onDragStart,
-  onDragOver,
-  onDrop,
-  onDragEnd,
   distanceText,
 }: {
   store: SurveyStore;
   stats: RegionStats;
   items: SurveyItem[];
   focused: boolean;
-  orderEditing: boolean;
-  dragging: boolean;
   onOpen: () => void;
   onContacts: () => void;
   onAssignToggle: () => void;
-  onOrderChange: (value: string) => void;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
-  onDragStart: () => void;
-  onDragOver: (event: DragEvent<HTMLElement>) => void;
-  onDrop: () => void;
-  onDragEnd: () => void;
   distanceText?: string;
 }) {
   const completed = items.filter((item) => item.status === "완료");
@@ -1687,22 +1599,6 @@ function StoreCard({
   const percent = stats.total ? Math.round((stats.completed / stats.total) * 100) : 0;
   const completedStore = isStoreComplete(store, stats);
   const displayOperatingStatus = storeDisplayStatus(store);
-  if (orderEditing) {
-    return (
-      <article id={`store-card-${store.id}`} className={`visit-order-row ${focused ? "focused" : ""} ${dragging ? "dragging" : ""}`} draggable onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}>
-        <span className="drag-handle" aria-hidden="true">☰</span>
-        <input aria-label={`${store.storeName} 방문순서`} inputMode="numeric" value={store.visitOrder ?? ""} placeholder="-" onChange={(event) => onOrderChange(event.target.value)} />
-        <div className="visit-order-name">
-          <strong>{store.storeName}</strong>
-          <span>{store.storeAddress || "주소 없음"}</span>
-        </div>
-        <div className="visit-order-actions">
-          <button type="button" onClick={onMoveUp}>↑</button>
-          <button type="button" onClick={onMoveDown}>↓</button>
-        </div>
-      </article>
-    );
-  }
 
   return (
     <article id={`store-card-${store.id}`} className={`card store-card ${focused ? "focused" : ""} ${completedStore ? "completed" : ""}`}>
@@ -1734,16 +1630,16 @@ function StoreCard({
   );
 }
 
-function StoreMapView({ region, stores, statsByStore, userLocation, locationMessage, selectedStoreId, onOpen, onContacts, onToggle }: { region: string; stores: SurveyStore[]; statsByStore: Map<string, RegionStats>; userLocation: { latitude: number; longitude: number } | null; locationMessage: string; selectedStoreId: string; onLocate: () => Promise<{ latitude: number; longitude: number } | null>; onOpen: (store: SurveyStore) => void; onContacts: (store: SurveyStore) => void; onToggle: (store: SurveyStore) => void | Promise<void> }) {
+function StoreMapView({ stores, statsByStore, userLocation, locationMessage, selectedStoreId, onOpen, onContacts, onToggle }: { stores: SurveyStore[]; statsByStore: Map<string, RegionStats>; userLocation: { latitude: number; longitude: number } | null; locationMessage: string; selectedStoreId: string; onLocate: () => Promise<{ latitude: number; longitude: number } | null>; onOpen: (store: SurveyStore) => void; onContacts: (store: SurveyStore) => void; onToggle: (store: SurveyStore) => void | Promise<void> }) {
   const mapNode = useRef<HTMLDivElement | null>(null);
   const leafletMap = useRef<import("leaflet").Map | null>(null);
   const markerLayer = useRef<import("leaflet").LayerGroup | null>(null);
   const mappedStores = stores.filter(hasStoreCoordinates);
   const initialActiveId = selectedStoreId && mappedStores.some((store) => store.id === selectedStoreId) ? selectedStoreId : mappedStores[0]?.id ?? "";
   const [activeStoreId, setActiveStoreId] = useState(initialActiveId);
-  const missingStores = stores.filter((store) => !hasStoreCoordinates(store));
   const activeStore = stores.find((store) => store.id === activeStoreId);
   const completedCount = stores.filter((store) => isStoreComplete(store, statsByStore.get(store.id) ?? emptyStats)).length;
+  const locationText = userLocation ? `내 위치: ${userLocation.latitude.toFixed(5)}, ${userLocation.longitude.toFixed(5)}` : "내 위치: 확인 필요";
   const mapSignature = [
     mappedStores.map((store) => `${store.id}:${store.latitude}:${store.longitude}:${isStoreComplete(store, statsByStore.get(store.id) ?? emptyStats) ? "1" : "0"}`).join("|"),
     userLocation ? `${userLocation.latitude}:${userLocation.longitude}` : "",
@@ -1761,6 +1657,7 @@ function StoreMapView({ region, stores, statsByStore, userLocation, locationMess
         }).addTo(map);
         leafletMap.current = map;
       }
+      window.requestAnimationFrame(() => map.invalidateSize());
       markerLayer.current?.remove();
       const layer = leaflet.layerGroup().addTo(map);
       markerLayer.current = layer;
@@ -1823,10 +1720,8 @@ function StoreMapView({ region, stores, statsByStore, userLocation, locationMess
   return (
     <div className="map-page">
       <section className="map-summary">
-        <div>
-          <strong>{region}</strong>
-          <span>담당매장 {stores.length.toLocaleString()}개 · 완료 {completedCount.toLocaleString()}개 · 미완료 {(stores.length - completedCount).toLocaleString()}개</span>
-        </div>
+        <span>담당매장 {stores.length.toLocaleString()}개 · 완료 {completedCount.toLocaleString()}개 · 미완료 {(stores.length - completedCount).toLocaleString()}개</span>
+        <span>{locationText}</span>
       </section>
       {locationMessage && <p className="map-location-message">{locationMessage}</p>}
       <section className="map-panel">
@@ -1851,20 +1746,6 @@ function StoreMapView({ region, stores, statsByStore, userLocation, locationMess
           <p className="muted">좌표가 있는 매장을 선택하면 여기에 정보가 표시됩니다.</p>
         )}
       </section>
-      {missingStores.length > 0 && (
-        <section className="panel">
-          <h2>좌표 없음 ({missingStores.length.toLocaleString()}개)</h2>
-          <p className="muted">엑셀에 위도/경도 컬럼을 추가하거나 위치를 검색하면 지도에 마커로 표시됩니다.</p>
-          <div className="map-missing-list">
-            {missingStores.slice(0, 80).map((store) => (
-              <button key={store.id} type="button" onClick={() => onOpen(store)}>
-                <strong>{store.storeName}</strong>
-                <span>{store.storeAddress || "주소 없음"}</span>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
     </div>
   );
 }

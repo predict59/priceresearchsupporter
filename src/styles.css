@@ -155,6 +155,10 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 .page { width: min(1180px, 100%); max-width: 100%; margin: 0 auto; padding: 14px 14px 96px; overflow-x: clip; }
+.workspace-page {
+  padding-top: 0;
+  overflow-x: visible;
+}
 .item-page {
   width: var(--app-visual-width);
   max-width: var(--app-visual-width);
@@ -318,6 +322,13 @@ textarea { min-height: 110px; resize: vertical; }
 .workspace-search {
   grid-template-columns: minmax(0, 1fr) auto;
 }
+.workspace-page .workspace-search {
+  position: sticky;
+  top: calc(var(--topbar-height) + 37px);
+  z-index: 21;
+  margin: 0 -14px 10px;
+  padding: 8px 14px;
+}
 .sticky-search .search { margin: 0; }
 .search input::placeholder {
   color: #c5ced7;
@@ -409,10 +420,14 @@ textarea { min-height: 110px; resize: vertical; }
 }
 .tool-toggle { min-height: 44px; white-space: nowrap; }
 .workspace-tabs {
+  position: sticky;
+  top: var(--topbar-height);
+  z-index: 22;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0;
-  margin: 0 0 8px;
+  margin: 0 -14px 8px;
+  padding: 0 14px;
   border-bottom: 1px solid #dbe1e5;
   background: #fff;
 }
@@ -683,12 +698,20 @@ textarea { min-height: 110px; resize: vertical; }
 }
 .store-filter-sort-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(124px, 156px);
+  grid-template-columns: minmax(0, 1fr) 132px;
   gap: 8px;
-  align-items: start;
+  align-items: stretch;
 }
 .store-filter-sort-row .filter-chips {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: stretch;
   margin-bottom: 0;
+}
+.store-filter-sort-row .filter-chips button,
+.store-filter-sort-row .sort-control select {
+  min-height: 34px;
+  height: 34px;
 }
 .order-edit-toggle {
   width: fit-content;
@@ -1877,22 +1900,14 @@ textarea { min-height: 110px; resize: vertical; }
   gap: 6px;
 }
 .map-page {
-  padding-bottom: 28px;
+  display: grid;
+  gap: 8px;
+  padding-bottom: 58px;
 }
 .map-summary {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: center;
-  margin-bottom: 10px;
-}
-.map-summary > div {
-  min-width: 0;
-  display: grid;
   gap: 3px;
-}
-.map-summary strong {
-  font-size: 18px;
+  margin-bottom: 0;
 }
 .map-summary span,
 .map-location-message {
@@ -1916,18 +1931,26 @@ textarea { min-height: 110px; resize: vertical; }
   border-radius: 8px;
   overflow: hidden;
   background: #fff;
-  margin-bottom: 12px;
+  margin-bottom: 0;
 }
 .store-map {
   width: 100%;
-  height: min(62dvh, 520px);
-  min-height: 360px;
+  height: clamp(220px, 42dvh, 420px);
+  min-height: 220px;
+}
+.map-active-panel {
+  position: relative;
+  overflow: visible;
 }
 .map-active-panel h2 {
   margin-bottom: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .map-active-panel p {
-  margin: 0 0 12px;
+  margin: 0 0 10px;
+  font-size: 13px;
 }
 .map-active-actions {
   display: grid;
@@ -1937,8 +1960,8 @@ textarea { min-height: 110px; resize: vertical; }
 .map-active-actions .card-menu summary {
   width: 40px;
   height: 40px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
+  border: 0;
+  border-radius: 999px;
 }
 .map-active-stat {
   display: inline-flex;
@@ -1959,7 +1982,7 @@ textarea { min-height: 110px; resize: vertical; }
 .location-fab {
   position: fixed;
   right: 14px;
-  bottom: 78px;
+  bottom: 16px;
   z-index: 30;
   min-height: 38px;
   padding: 0 14px;
@@ -2107,15 +2130,30 @@ textarea { min-height: 110px; resize: vertical; }
   .workspace-tabs { gap: 0; }
   .workspace-tabs button { font-size: 12px; padding: 0 6px; }
   .store-filter-sort-row {
-    grid-template-columns: minmax(0, 1fr) 118px;
+    grid-template-columns: minmax(0, 1fr) 108px;
+    gap: 6px;
   }
   .store-filter-sort-row .filter-chips {
     gap: 4px;
   }
   .store-filter-sort-row .filter-chips button {
     min-height: 28px;
-    padding: 0 7px;
+    height: 32px;
+    padding: 0 5px;
+    font-size: 10.5px;
+  }
+  .store-filter-sort-row .sort-control select {
+    height: 32px;
+    min-height: 32px;
+    padding: 0 8px;
     font-size: 11px;
+  }
+  .store-map {
+    height: clamp(210px, 39dvh, 330px);
+    min-height: 210px;
+  }
+  .map-active-panel {
+    padding: 12px;
   }
   .assignment-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .assignment-actions span { grid-column: 1 / -1; }
