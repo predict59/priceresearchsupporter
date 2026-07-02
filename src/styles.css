@@ -906,6 +906,28 @@ textarea { min-height: 110px; resize: vertical; }
   color: #0f766e;
   font-weight: 800;
 }
+.photo-result {
+  margin: 10px 0 0;
+  padding: 9px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 900;
+}
+.photo-result.ok {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #047857;
+}
+.photo-result.warn {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #c2410c;
+}
+.photo-result.pending {
+  background: #ecfeff;
+  border: 1px solid #a5f3fc;
+  color: #0e7490;
+}
 .item-hero {
   position: relative;
   z-index: 1;

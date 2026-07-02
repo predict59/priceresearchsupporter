@@ -198,12 +198,85 @@ function extractPriceCandidates(text: string) {
     .slice(0, 4);
 }
 
+function createPriceOcrCanvas(bitmap: ImageBitmap, mode: "contrast" | "threshold", crop?: { x: number; y: number; width: number; height: number }) {
+  const source = crop ?? { x: 0, y: 0, width: bitmap.width, height: bitmap.height };
+  const canvas = document.createElement("canvas");
+  const scale = Math.min(2.4, Math.max(1.4, 2200 / Math.max(source.width, source.height)));
+  canvas.width = Math.round(source.width * scale);
+  canvas.height = Math.round(source.height * scale);
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) return undefined;
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(bitmap, source.x, source.y, source.width, source.height, 0, 0, canvas.width, canvas.height);
+
+  const image = context.getImageData(0, 0, canvas.width, canvas.height);
+  const data = image.data;
+  for (let index = 0; index < data.length; index += 4) {
+    const gray = data[index] * 0.299 + data[index + 1] * 0.587 + data[index + 2] * 0.114;
+    const adjusted = mode === "threshold"
+      ? gray > 142 ? 255 : 0
+      : Math.max(0, Math.min(255, (gray - 128) * 1.65 + 128));
+    data[index] = adjusted;
+    data[index + 1] = adjusted;
+    data[index + 2] = adjusted;
+  }
+  context.putImageData(image, 0, 0);
+  return canvas;
+}
+
+async function createPriceOcrSources(blob: Blob) {
+  const bitmap = await createImageBitmap(blob);
+  try {
+    const sources: HTMLCanvasElement[] = [];
+    const full = { x: 0, y: 0, width: bitmap.width, height: bitmap.height };
+    const center = { x: bitmap.width * 0.08, y: bitmap.height * 0.08, width: bitmap.width * 0.84, height: bitmap.height * 0.84 };
+    const top = { x: 0, y: 0, width: bitmap.width, height: bitmap.height * 0.7 };
+    [full, center, top].forEach((crop, index) => {
+      const contrast = createPriceOcrCanvas(bitmap, "contrast", crop);
+      if (contrast) sources.push(contrast);
+      if (index < 2) {
+        const threshold = createPriceOcrCanvas(bitmap, "threshold", crop);
+        if (threshold) sources.push(threshold);
+      }
+    });
+    return sources;
+  } finally {
+    bitmap.close();
+  }
+}
+
 async function detectPriceCandidatesFromBlob(blob: Blob) {
   const tesseract = await import("tesseract.js");
-  const result = await tesseract.recognize(blob, "kor+eng", {
+  const worker = await tesseract.createWorker("eng", tesseract.OEM.LSTM_ONLY, {
     logger: () => undefined,
   });
-  return extractPriceCandidates(result.data.text);
+  try {
+    await worker.setParameters({
+      tessedit_pageseg_mode: tesseract.PSM.SPARSE_TEXT,
+      tessedit_char_whitelist: "0123456789,.",
+      preserve_interword_spaces: "1",
+      user_defined_dpi: "300",
+    });
+    const sources = await createPriceOcrSources(blob);
+    const merged = new Map<number, PriceCandidate>();
+    for (const source of sources) {
+      const result = await worker.recognize(source);
+      for (const candidate of extractPriceCandidates(result.data.text)) {
+        const old = merged.get(candidate.value);
+        const boosted = { ...candidate, score: candidate.score + (old ? 12 : 0) };
+        if (!old || old.score < boosted.score) merged.set(candidate.value, boosted);
+      }
+      if (merged.size >= 4) {
+        const bestScore = Math.max(...Array.from(merged.values()).map((candidate) => candidate.score));
+        if (bestScore >= 90) break;
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    }
+    return Array.from(merged.values()).sort((a, b) => b.score - a.score || b.value - a.value).slice(0, 4);
+  } finally {
+    await worker.terminate();
+  }
 }
 
 async function resizePhoto(file: File) {
@@ -1765,10 +1838,8 @@ function ItemEditor({ item, storeItems, storeOperatingStatus, photos, onSave, on
       <h2 className="section-title-row">④ 사진자료 {missing.length > 0 && <span className="inline-missing">사진누락: {missing.join(", ")}</span>}</h2>
       {!draft.normalDisplay && <p className="notice">먼저 ② 실물 확인에서 진열여부 O/X를 선택해 주세요.</p>}
       {draft.normalDisplay === "O" && <p className="small-help barcode-help">참고: 제품정보사진 촬영 시 브라우저가 지원하면 바코드를 자동 비교합니다.</p>}
-      {photoMessage && draft.normalDisplay === "O" && <p className="ok upload-message">{photoMessage}</p>}
-      {priceOcrMessage && draft.normalDisplay === "O" && <p className={`upload-message ${priceCandidates.length ? "ok" : priceOcrMessage.includes("중") ? "pending" : "warn"}`}>{priceOcrMessage}</p>}
-      <PhotoSlot id="photo-product-display" label="제품진열사진" description="가격정보와 진열상품이 동시노출 되도록 촬영" disabled={draft.normalDisplay !== "O"} photo={itemPhotos.display} onFile={(file) => upload("PRODUCT_DISPLAY", file)} onDelete={(photo) => { setDeletedPhotoIds((old) => photo.id.startsWith("temp_") ? old : [...old, photo.id]); setLocalPhotos((old) => old.filter((candidate) => candidate.id !== photo.id)); }} />
-      <PhotoSlot id="photo-product-info" label="제품정보사진" description="상품후면 제품상세정보와 바코드 동시노출 되도록 촬영" disabled={draft.normalDisplay !== "O"} photo={itemPhotos.info} onFile={(file) => upload("PRODUCT_INFO_BARCODE", file)} onDelete={(photo) => { setDeletedPhotoIds((old) => photo.id.startsWith("temp_") ? old : [...old, photo.id]); setLocalPhotos((old) => old.filter((candidate) => candidate.id !== photo.id)); }} />
+      <PhotoSlot id="photo-product-display" label="제품진열사진" description="가격정보와 진열상품이 동시노출 되도록 촬영" disabled={draft.normalDisplay !== "O"} photo={itemPhotos.display} message={priceOcrMessage} messageTone={priceCandidates.length ? "ok" : priceOcrMessage.includes("중") ? "pending" : "warn"} onFile={(file) => upload("PRODUCT_DISPLAY", file)} onDelete={(photo) => { setDeletedPhotoIds((old) => photo.id.startsWith("temp_") ? old : [...old, photo.id]); setLocalPhotos((old) => old.filter((candidate) => candidate.id !== photo.id)); }} />
+      <PhotoSlot id="photo-product-info" label="제품정보사진" description="상품후면 제품상세정보와 바코드 동시노출 되도록 촬영" disabled={draft.normalDisplay !== "O"} photo={itemPhotos.info} message={photoMessage} messageTone={photoMessage.includes("불일치") || photoMessage.includes("실패") || photoMessage.includes("못했습니다") ? "warn" : "ok"} onFile={(file) => upload("PRODUCT_INFO_BARCODE", file)} onDelete={(photo) => { setDeletedPhotoIds((old) => photo.id.startsWith("temp_") ? old : [...old, photo.id]); setLocalPhotos((old) => old.filter((candidate) => candidate.id !== photo.id)); }} />
       <PhotoSlot id="photo-pos-receipt" label="POS/영수증사진" description="제품진열사진으로 가격정보 확인불가 시 POS기 또는 영수증 촬영" disabled={!draft.normalDisplay} photo={itemPhotos.pos} onFile={(file) => upload("POS_RECEIPT", file)} onDelete={(photo) => { setDeletedPhotoIds((old) => photo.id.startsWith("temp_") ? old : [...old, photo.id]); setLocalPhotos((old) => old.filter((candidate) => candidate.id !== photo.id)); }} />
     </section>
     <section className={`panel price-panel ${priceBlocked ? "disabled-block" : ""}`}>
@@ -1826,7 +1897,7 @@ function PriceCandidateChips({ label, candidates, disabled, onPick }: { label: s
   );
 }
 
-function PhotoSlot({ id, label, description, disabled, photo, onFile, onDelete }: { id: string; label: string; description: string; disabled?: boolean; photo?: SurveyPhoto; onFile: (file: File) => void | Promise<void>; onDelete: (photo: SurveyPhoto) => void | Promise<void> }) {
+function PhotoSlot({ id, label, description, disabled, photo, message, messageTone, onFile, onDelete }: { id: string; label: string; description: string; disabled?: boolean; photo?: SurveyPhoto; message?: string; messageTone?: "ok" | "warn" | "pending"; onFile: (file: File) => void | Promise<void>; onDelete: (photo: SurveyPhoto) => void | Promise<void> }) {
   return (
     <div id={`${id}-slot`} className={`photo-slot ${photo ? "uploaded" : ""} ${disabled ? "photo-disabled" : ""}`}>
       <div>
@@ -1841,6 +1912,7 @@ function PhotoSlot({ id, label, description, disabled, photo, onFile, onDelete }
         {photo && !disabled && <button className="danger" onClick={() => onDelete(photo)}>지우기</button>}
         {disabled && <span className="photo-disabled-note">진열여부 선택에 따라 비활성화됨</span>}
       </div>
+      {message && !disabled && <p className={`upload-message photo-result ${messageTone ?? "ok"}`}>{message}</p>}
     </div>
   );
 }
