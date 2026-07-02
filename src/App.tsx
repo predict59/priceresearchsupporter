@@ -443,7 +443,7 @@ function App() {
     () => sortedRegionStores.filter((store) => store.mapIncluded !== false),
     [sortedRegionStores],
   );
-  const canUseStoreMap = Boolean(userLocation) && assignedRegionStores.some(hasStoreCoordinates);
+  const canUseStoreMap = Boolean(userLocation);
   const assignmentVisibleStores = useMemo(() => {
     const query = storeQuery.trim();
     if (!query) return sortedRegionStores;
@@ -605,10 +605,10 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (storeSort === "거리 순" && (!userLocation || !assignedRegionStores.some(hasStoreCoordinates))) {
+    if (storeSort === "거리 순" && !userLocation) {
       setStoreSort("이름 순");
     }
-  }, [storeSort, userLocation, assignedRegionStores]);
+  }, [storeSort, userLocation]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -961,8 +961,9 @@ function App() {
     setMenuOpen(false);
   }
 
-  const regionSummary = (region: string) => {
-    const regionStoresForSummary = stores.filter((store) => store.region === region);
+  const regionSummary = (region: string, assignedOnly = false) => {
+    const regionStoresForSummary = stores.filter((store) => store.region === region && (!assignedOnly || store.mapIncluded !== false));
+    const storeIds = new Set(regionStoresForSummary.map((store) => store.id));
     const regionItemsForSummary = items.filter((item) => item.region === region);
     const completed = regionStoresForSummary.filter((store) => {
       const own = regionItemsForSummary.filter((item) => item.storeId === store.id);
@@ -978,7 +979,7 @@ function App() {
       completed,
       inProgress,
       notStarted: Math.max(0, regionStoresForSummary.length - completed - inProgress),
-      photoMissing: summarize(regionItemsForSummary, region === currentRegion ? photos : []).photoMissing,
+      photoMissing: summarize(regionItemsForSummary.filter((item) => storeIds.has(item.storeId)), region === currentRegion ? photos : []).photoMissing,
     };
   };
   const canGoBack = view !== "upload" && !(view === "regions" && regions.length > 0);
@@ -1011,7 +1012,7 @@ function App() {
   };
   const screenTitle =
     view === "regions" ? "메인"
-    : view === "assignment" ? "담당매장 설정"
+    : view === "assignment" ? "담당매장 관리"
     : view === "workspace" ? workspaceMode === "map" ? "매장지도" : "매장리스트"
     : view === "store" ? "매장정보"
     : view === "items" ? "물품리스트"
@@ -1102,12 +1103,19 @@ function App() {
                 <span>최근 지역</span>
                 <button onClick={() => chooseRegion(currentRegion)}>{currentRegion}</button>
               </div>
-              <a className="mini-map-link" target="_blank" href={TARGET_MAP_URL}>조사처 전체 지도 확인</a>
+              <a className="mini-map-link" target="_blank" href={TARGET_MAP_URL}>전체 지도</a>
             </div>
           )}
           <div className="grid">
             {regions.filter((region) => region.name.includes(regionQuery)).map((region) => {
               const summary = regionSummary(region.name);
+              const assignedSummary = regionSummary(region.name, true);
+              const regionStoreIds = new Set(stores.filter((store) => store.region === region.name).map((store) => store.id));
+              const assignedStoreIds = new Set(stores.filter((store) => store.region === region.name && store.mapIncluded !== false).map((store) => store.id));
+              const regionPhotos = region.name === currentRegion ? photos : [];
+              const allItemStats = summarize(items.filter((item) => item.region === region.name), regionPhotos);
+              const assignedItemStats = summarize(items.filter((item) => item.region === region.name && assignedStoreIds.has(item.storeId)), regionPhotos);
+              const hasPartialAssignment = regionStoreIds.size > 0 && assignedStoreIds.size !== regionStoreIds.size;
               return (
                 <article className="card region-card" key={region.name}>
                   <div className="region-card-head">
@@ -1115,13 +1123,18 @@ function App() {
                     <details className="card-menu subtle-menu">
                       <summary aria-label={`${region.name} 메뉴`}><MoreVertical size={18} /></summary>
                       <div className="menu-popover">
-                        <button type="button" onClick={() => openAssignment(region.name)}>담당매장 설정</button>
+                        <button type="button" onClick={() => openAssignment(region.name)}>담당매장 관리</button>
                       </div>
                     </details>
                   </div>
                   <p className="area-summary">{region.areaSummary || region.city || "-"}</p>
                   <p className="muted">담당부서: {region.department || "-"}</p>
-                  <RegionSummary stats={summary.total ? summary : emptyStats} itemStats={summarize(items.filter((item) => item.region === region.name), region.name === currentRegion ? photos : [])} />
+                  <RegionSummary
+                    stats={summary.total ? summary : emptyStats}
+                    itemStats={allItemStats}
+                    assignedStats={hasPartialAssignment ? assignedSummary : undefined}
+                    assignedItemStats={hasPartialAssignment ? assignedItemStats : undefined}
+                  />
                   <div className="region-actions">
                     <button className="primary" onClick={() => chooseRegion(region.name)}>작업</button>
                     <button title="엑셀 내보내기" onClick={() => doExportExcel(region.name)}><Download size={16} />엑셀</button>
@@ -1158,11 +1171,11 @@ function App() {
                   <option>이름 순</option>
                   <option>품목 많은 순</option>
                   <option>미완료 많은 순</option>
-                  <option disabled={!userLocation || !assignedRegionStores.some(hasStoreCoordinates)}>거리 순</option>
+                  <option disabled={!userLocation}>거리 순</option>
                 </select>
                 </label>
               </div>
-              {storeSort === "거리 순" && (!userLocation || !assignedRegionStores.some(hasStoreCoordinates)) && <p className="small-help warn">거리순은 내 위치와 매장 위치정보가 있을 때 사용할 수 있습니다.</p>}
+              {storeSort === "거리 순" && !assignedRegionStores.some(hasStoreCoordinates) && <p className="small-help warn">매장 위치정보가 없으면 거리순 정렬이 정확하지 않을 수 있습니다.</p>}
             </section>
           )}
           {workspaceMode === "list" && (
@@ -1502,7 +1515,7 @@ function Stats({ stats, totalLabel = "전체" }: { stats: RegionStats; totalLabe
   );
 }
 
-function RegionSummary({ stats, itemStats }: { stats: RegionStats; itemStats: RegionStats }) {
+function RegionSummary({ stats, itemStats, assignedStats, assignedItemStats }: { stats: RegionStats; itemStats: RegionStats; assignedStats?: RegionStats; assignedItemStats?: RegionStats }) {
   const storePercent = stats.total ? Math.round((stats.completed / stats.total) * 100) : 0;
   const itemPercent = itemStats.total ? Math.round((itemStats.completed / itemStats.total) * 100) : 0;
   return (
@@ -1511,13 +1524,13 @@ function RegionSummary({ stats, itemStats }: { stats: RegionStats; itemStats: Re
         <span>매장</span>
         <strong>{stats.completed.toLocaleString()}<small>/{stats.total.toLocaleString()}</small></strong>
         <div className="mini-progress"><i style={{ width: `${storePercent}%` }} /></div>
-        <em>미조사 {stats.notStarted.toLocaleString()}</em>
+        {assignedStats ? <em className="assigned-progress">담당 {assignedStats.completed.toLocaleString()}/{assignedStats.total.toLocaleString()}</em> : <em>미조사 {stats.notStarted.toLocaleString()}</em>}
       </div>
       <div className="region-metric">
         <span>품목</span>
         <strong>{itemStats.completed.toLocaleString()}<small>/{itemStats.total.toLocaleString()}</small></strong>
         <div className="mini-progress"><i style={{ width: `${itemPercent}%` }} /></div>
-        <em>미조사 {itemStats.notStarted.toLocaleString()}</em>
+        {assignedItemStats ? <em className="assigned-progress">담당 {assignedItemStats.completed.toLocaleString()}/{assignedItemStats.total.toLocaleString()}</em> : <em>미조사 {itemStats.notStarted.toLocaleString()}</em>}
       </div>
     </div>
   );
@@ -1757,7 +1770,7 @@ function StoreAssignmentPanel({ stores, totalStores, statsByStore, geocoding, ge
     <section className="panel assignment-panel">
       <div className="assignment-head">
         <div>
-          <h2>담당매장 설정</h2>
+          <h2>담당매장 관리</h2>
           <p>체크한 매장만 매장리스트와 매장지도에 표시됩니다. 위치정보를 가져오면 지도와 거리순을 사용할 수 있습니다.</p>
         </div>
         <strong>{assignedCount.toLocaleString()}<small>/{stores.length.toLocaleString()}</small></strong>

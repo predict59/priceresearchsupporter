@@ -323,9 +323,6 @@ textarea { min-height: 110px; resize: vertical; }
   grid-template-columns: minmax(0, 1fr) auto;
 }
 .workspace-page .workspace-search {
-  position: sticky;
-  top: calc(var(--topbar-height) + 37px);
-  z-index: 21;
   margin: 0 -14px 10px;
   padding: 8px 14px;
 }
@@ -420,9 +417,6 @@ textarea { min-height: 110px; resize: vertical; }
 }
 .tool-toggle { min-height: 44px; white-space: nowrap; }
 .workspace-tabs {
-  position: sticky;
-  top: var(--topbar-height);
-  z-index: 22;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0;
@@ -578,6 +572,9 @@ textarea { min-height: 110px; resize: vertical; }
   color: #64748b;
   font-size: 12px;
   font-weight: 800;
+}
+.region-metric em.assigned-progress {
+  color: #0f766e;
 }
 .mini-progress {
   height: 5px;
