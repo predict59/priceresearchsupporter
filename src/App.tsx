@@ -181,8 +181,7 @@ function extractPriceCandidates(text: string) {
   const normalized = text
     .replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0))
     .replace(/[，]/g, ",")
-    .replace(/(\d{1,3})\s*[,.]\s*(\d{3})(?!\d)/g, "$1,$2")
-    .replace(/(\d{1,3})\s+(\d{3})(?!\d)/g, "$1,$2");
+    .replace(/(\d)\s*,\s*(\d{3})/g, "$1,$2");
   const bucket = new Map<number, PriceCandidate>();
 
   for (const match of normalized.matchAll(/\d{1,3}(?:,\d{3})+/g)) {
@@ -199,10 +198,10 @@ function extractPriceCandidates(text: string) {
     .slice(0, 4);
 }
 
-function createPriceOcrCanvas(bitmap: ImageBitmap, mode: "contrast" | "threshold" | "soft", crop?: { x: number; y: number; width: number; height: number }) {
+function createPriceOcrCanvas(bitmap: ImageBitmap, mode: "contrast" | "threshold", crop?: { x: number; y: number; width: number; height: number }) {
   const source = crop ?? { x: 0, y: 0, width: bitmap.width, height: bitmap.height };
   const canvas = document.createElement("canvas");
-  const scale = Math.min(3.2, Math.max(1.6, 2800 / Math.max(source.width, source.height)));
+  const scale = Math.min(2.4, Math.max(1.4, 2200 / Math.max(source.width, source.height)));
   canvas.width = Math.round(source.width * scale);
   canvas.height = Math.round(source.height * scale);
   const context = canvas.getContext("2d", { willReadFrequently: true });
@@ -216,10 +215,8 @@ function createPriceOcrCanvas(bitmap: ImageBitmap, mode: "contrast" | "threshold
   for (let index = 0; index < data.length; index += 4) {
     const gray = data[index] * 0.299 + data[index + 1] * 0.587 + data[index + 2] * 0.114;
     const adjusted = mode === "threshold"
-      ? gray > 140 ? 255 : 0
-      : mode === "soft"
-        ? Math.max(0, Math.min(255, (gray - 128) * 1.25 + 138))
-        : Math.max(0, Math.min(255, (gray - 128) * 1.9 + 128));
+      ? gray > 142 ? 255 : 0
+      : Math.max(0, Math.min(255, (gray - 128) * 1.65 + 128));
     data[index] = adjusted;
     data[index + 1] = adjusted;
     data[index + 2] = adjusted;
@@ -234,16 +231,11 @@ async function createPriceOcrSources(blob: Blob) {
     const sources: HTMLCanvasElement[] = [];
     const full = { x: 0, y: 0, width: bitmap.width, height: bitmap.height };
     const center = { x: bitmap.width * 0.08, y: bitmap.height * 0.08, width: bitmap.width * 0.84, height: bitmap.height * 0.84 };
-    const top = { x: 0, y: 0, width: bitmap.width, height: bitmap.height * 0.72 };
-    const bottom = { x: 0, y: bitmap.height * 0.28, width: bitmap.width, height: bitmap.height * 0.72 };
-    const right = { x: bitmap.width * 0.35, y: 0, width: bitmap.width * 0.65, height: bitmap.height };
-    const lowerRight = { x: bitmap.width * 0.35, y: bitmap.height * 0.28, width: bitmap.width * 0.65, height: bitmap.height * 0.72 };
-    [full, center, top, bottom, right, lowerRight].forEach((crop, index) => {
-      const soft = createPriceOcrCanvas(bitmap, "soft", crop);
-      if (soft) sources.push(soft);
+    const top = { x: 0, y: 0, width: bitmap.width, height: bitmap.height * 0.7 };
+    [full, center, top].forEach((crop, index) => {
       const contrast = createPriceOcrCanvas(bitmap, "contrast", crop);
       if (contrast) sources.push(contrast);
-      if (index < 4) {
+      if (index < 2) {
         const threshold = createPriceOcrCanvas(bitmap, "threshold", crop);
         if (threshold) sources.push(threshold);
       }
@@ -637,8 +629,8 @@ function App() {
     if (missing.length) {
       const label = next.normalDisplay === "X" ? "정상진열 X 품목" : next.normalDisplay === "O" ? "정상진열 품목" : "정상진열 여부가 선택되지 않아 기본 사진 기준";
       const ok = await askConfirm({
-        title: "",
-        message: `${label}은 아래 사진이 필요합니다.\n- ${missing.join("\n- ")}\n그래도 저장하시겠습니까?`,
+        title: "사진이 부족합니다",
+        message: `${label}은 아래 사진이 필요합니다.\n\n- ${missing.join("\n- ")}\n\n그래도 저장하시겠습니까?`,
         confirmText: "사진 없이 저장",
         cancelText: "취소",
         danger: true,
@@ -1291,8 +1283,10 @@ function ConfirmDialog({ state, onClose }: { state: ConfirmState; onClose: (valu
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true">
       <section className="modal confirm-dialog">
+        {!state.plain && <div className="confirm-icon" aria-hidden="true">{state.danger ? "!" : "✓"}</div>}
+        {state.title && <h2>{state.title}</h2>}
         <div className="confirm-message">
-          {state.message.split("\n").filter((line) => line.trim()).map((line, index) => <p key={`${line}-${index}`}>{line}</p>)}
+          {state.message.split("\n").map((line, index) => <p key={`${line}-${index}`}>{line || "\u00a0"}</p>)}
         </div>
         <div className="confirm-actions">
           <button onClick={() => onClose(false)}>{state.cancelText ?? "취소"}</button>
