@@ -24,6 +24,7 @@ const mapLinks = (address: string) => [
   ["네이버", `https://map.naver.com/p/search/${encodeURIComponent(mapSearchAddress(address))}`],
   ["카카오", `https://map.kakao.com/link/search/${encodeURIComponent(mapSearchAddress(address))}`],
 ];
+const delay = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
 const emptyStats: RegionStats = { total: 0, completed: 0, inProgress: 0, notStarted: 0, photoMissing: 0 };
 const num = (value: string) => {
@@ -40,6 +41,7 @@ const TARGET_MAP_URL = "https://www.google.com/maps/d/u/1/viewer?mid=1ej99Lo6WS4
 type PriceCandidate = { value: number; score: number; source: "comma" | "plain" };
 const PRICE_KEYWORDS = /원|가격|정상|판매|할인|행사|특가|세일|SALE|sale|올리브|카드|멤버십|회원|쿠폰/;
 const PRICE_MAX_VALUE = 999999;
+type GeocodeResult = { latitude: number; longitude: number; displayName?: string };
 const appendMemoText = (memo: string, text: string) => {
   const parts = memo.split("/").map((part) => part.trim()).filter(Boolean);
   if (parts.includes(text)) return memo;
@@ -277,6 +279,28 @@ async function detectPriceCandidatesFromBlob(blob: Blob) {
   } finally {
     await worker.terminate();
   }
+}
+
+async function geocodeAddress(address: string): Promise<GeocodeResult | null> {
+  const query = mapSearchAddress(address);
+  if (!query) return null;
+  const url = new URL("https://nominatim.openstreetmap.org/search");
+  url.searchParams.set("format", "jsonv2");
+  url.searchParams.set("q", query);
+  url.searchParams.set("limit", "1");
+  url.searchParams.set("countrycodes", "kr");
+  url.searchParams.set("addressdetails", "0");
+  const response = await fetch(url.toString(), {
+    headers: { Accept: "application/json", "Accept-Language": "ko" },
+  });
+  if (!response.ok) return null;
+  const results = await response.json() as Array<{ lat?: string; lon?: string; display_name?: string }>;
+  const first = results[0];
+  if (!first?.lat || !first.lon) return null;
+  const latitude = Number(first.lat);
+  const longitude = Number(first.lon);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  return { latitude, longitude, displayName: first.display_name };
 }
 
 async function resizePhoto(file: File) {
@@ -1051,6 +1075,11 @@ function App() {
           statsByStore={regionStatsByStore}
           onOpen={(store) => openStore(store)}
           onToggle={async (store) => { await putStore({ ...store, mapIncluded: false, updatedAt: now() }); await refresh(store.region); }}
+          onCoordinateUpdate={async (store, patch) => {
+            const nextStore = { ...store, ...patch, geocodedAt: now(), updatedAt: now() };
+            await putStore(nextStore);
+            setStores((old) => old.map((candidate) => candidate.id === store.id ? nextStore : candidate));
+          }}
         />
       )}
 
@@ -1483,11 +1512,13 @@ function StoreCard({
   );
 }
 
-function StoreMapView({ region, stores, statsByStore, onOpen, onToggle }: { region: string; stores: SurveyStore[]; statsByStore: Map<string, RegionStats>; onOpen: (store: SurveyStore) => void; onToggle: (store: SurveyStore) => void | Promise<void> }) {
+function StoreMapView({ region, stores, statsByStore, onOpen, onToggle, onCoordinateUpdate }: { region: string; stores: SurveyStore[]; statsByStore: Map<string, RegionStats>; onOpen: (store: SurveyStore) => void; onToggle: (store: SurveyStore) => void | Promise<void>; onCoordinateUpdate: (store: SurveyStore, patch: Partial<SurveyStore>) => void | Promise<void> }) {
   const mapNode = useRef<HTMLDivElement | null>(null);
   const [activeStoreId, setActiveStoreId] = useState(stores.find(hasStoreCoordinates)?.id ?? "");
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locationMessage, setLocationMessage] = useState("");
+  const [geocodeMessage, setGeocodeMessage] = useState("");
+  const [geocoding, setGeocoding] = useState(false);
   const mappedStores = stores.filter(hasStoreCoordinates);
   const missingStores = stores.filter((store) => !hasStoreCoordinates(store));
   const activeStore = stores.find((store) => store.id === activeStoreId);
@@ -1561,6 +1592,40 @@ function StoreMapView({ region, stores, statsByStore, onOpen, onToggle }: { regi
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
     );
   };
+  const geocodeMissingStores = async () => {
+    const targets = missingStores.filter((store) => store.storeAddress);
+    if (!targets.length) {
+      setGeocodeMessage("좌표를 검색할 마트가 없습니다.");
+      return;
+    }
+    setGeocoding(true);
+    let success = 0;
+    let failed = 0;
+    try {
+      for (const [index, store] of targets.entries()) {
+        setGeocodeMessage(`좌표 검색 중 ${index + 1}/${targets.length}: ${mapSearchAddress(store.storeAddress)}`);
+        try {
+          const result = await geocodeAddress(store.storeAddress);
+          if (result) {
+            success += 1;
+            await onCoordinateUpdate(store, { latitude: result.latitude, longitude: result.longitude, geocodeStatus: "성공" });
+            if (!activeStoreId) setActiveStoreId(store.id);
+          } else {
+            failed += 1;
+            await onCoordinateUpdate(store, { geocodeStatus: "실패" });
+          }
+        } catch (error) {
+          console.error(error);
+          failed += 1;
+          await onCoordinateUpdate(store, { geocodeStatus: "실패" });
+        }
+        if (index < targets.length - 1) await delay(1100);
+      }
+      setGeocodeMessage(`좌표 검색 완료: 성공 ${success}개 · 실패 ${failed}개`);
+    } finally {
+      setGeocoding(false);
+    }
+  };
 
   return (
     <main className="page map-page">
@@ -1569,9 +1634,13 @@ function StoreMapView({ region, stores, statsByStore, onOpen, onToggle }: { regi
           <strong>{region}</strong>
           <span>지도 대상 {stores.length.toLocaleString()}개 · 완료 {completedCount.toLocaleString()}개 · 미완료 {(stores.length - completedCount).toLocaleString()}개</span>
         </div>
-        <button type="button" onClick={locateMe}>내 위치</button>
+        <div className="map-summary-actions">
+          <button type="button" onClick={geocodeMissingStores} disabled={geocoding || missingStores.length === 0}>{geocoding ? "검색 중" : "좌표 검색"}</button>
+          <button type="button" onClick={locateMe}>내 위치</button>
+        </div>
       </section>
       {locationMessage && <p className="map-location-message">{locationMessage}</p>}
+      {geocodeMessage && <p className="map-location-message">{geocodeMessage}</p>}
       <section className="map-panel">
         <div ref={mapNode} className="store-map" />
       </section>
