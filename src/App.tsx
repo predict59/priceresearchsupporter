@@ -7,10 +7,10 @@ import { dataUrlToBlob, exportBackup, exportRegionExcel, exportRegionZip } from 
 import { mapSearchAddress, requiredPhotoLabels, summarize } from "./logic";
 import type { AppSettings, BackupPayload, PhotoType, Region, RegionStats, StoreOperatingStatus, SurveyItem, SurveyPhoto, SurveyStore } from "./types";
 
-type View = "upload" | "regions" | "workspace" | "store" | "items" | "item" | "backup" | "validation";
+type View = "upload" | "regions" | "assignment" | "workspace" | "store" | "items" | "item" | "backup" | "validation";
 type Filter = "전체" | "미완료" | "미조사" | "조사중" | "완료" | "사진누락";
-type StoreSort = "임의 지정 순" | "주소순" | "품목 많은 순" | "미완료 많은 순" | "사진누락 많은 순";
-type WorkspaceMode = "list" | "map" | "assignment";
+type StoreSort = "이름 순" | "품목 많은 순" | "미완료 많은 순" | "임의 지정 순" | "거리 순";
+type WorkspaceMode = "list" | "map";
 type ConfirmState = {
   title: string;
   message: string;
@@ -77,6 +77,20 @@ const formatBytes = (value?: number) => {
   return `${size.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
 };
 const conservativeQuota = (quota?: number) => quota ? Math.floor(Math.min(quota * 0.6, 2 * 1024 * 1024 * 1024)) : 0;
+const distanceKm = (from: { latitude: number; longitude: number }, to: { latitude: number; longitude: number }) => {
+  const rad = (value: number) => value * Math.PI / 180;
+  const earth = 6371;
+  const dLat = rad(to.latitude - from.latitude);
+  const dLon = rad(to.longitude - from.longitude);
+  const lat1 = rad(from.latitude);
+  const lat2 = rad(to.latitude);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return earth * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+const formatDistance = (km?: number) => {
+  if (km === undefined) return "";
+  return km < 1 ? `${Math.round(km * 1000)}m` : `${km.toFixed(km < 10 ? 1 : 0)}km`;
+};
 
 function barcodeScanRegions(width: number, height: number) {
   const regions = [{ x: 0, y: 0, width, height }];
@@ -357,7 +371,7 @@ function App() {
   const [analysis, setAnalysis] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [storeSort, setStoreSort] = useState<StoreSort>("주소순");
+  const [storeSort, setStoreSort] = useState<StoreSort>("이름 순");
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("list");
   const [orderEditing, setOrderEditing] = useState(false);
   const [dragStoreId, setDragStoreId] = useState("");
@@ -367,6 +381,10 @@ function App() {
   const [contactStoreId, setContactStoreId] = useState("");
   const [storageOpen, setStorageOpen] = useState(false);
   const [storageEstimate, setStorageEstimate] = useState<StorageEstimate | undefined>();
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [locationMessage, setLocationMessage] = useState("");
+  const [geocodeMessage, setGeocodeMessage] = useState("");
+  const [geocoding, setGeocoding] = useState(false);
   const [photosReady, setPhotosReady] = useState(false);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [storeStatusDraft, setStoreStatusDraft] = useState<StoreOperatingStatus | "">("");
@@ -398,12 +416,16 @@ function App() {
       const as = regionStatsByStore.get(a.id) ?? emptyStats;
       const bs = regionStatsByStore.get(b.id) ?? emptyStats;
       if (storeSort === "임의 지정 순") return storeVisitCompare(a, b);
+      if (storeSort === "거리 순" && userLocation) {
+        const ad = hasStoreCoordinates(a) ? distanceKm(userLocation, { latitude: a.latitude!, longitude: a.longitude! }) : Number.POSITIVE_INFINITY;
+        const bd = hasStoreCoordinates(b) ? distanceKm(userLocation, { latitude: b.latitude!, longitude: b.longitude! }) : Number.POSITIVE_INFINITY;
+        return ad - bd || a.storeName.localeCompare(b.storeName, "ko");
+      }
       if (storeSort === "품목 많은 순") return bs.total - as.total;
-      if (storeSort === "사진누락 많은 순") return bs.photoMissing - as.photoMissing;
-      if (storeSort === "주소순") return `${a.storeAddress} ${a.storeName}`.localeCompare(`${b.storeAddress} ${b.storeName}`, "ko");
-      return (bs.notStarted + bs.inProgress) - (as.notStarted + as.inProgress);
+      if (storeSort === "미완료 많은 순") return (bs.notStarted + bs.inProgress) - (as.notStarted + as.inProgress);
+      return a.storeName.localeCompare(b.storeName, "ko") || `${a.storeAddress}`.localeCompare(`${b.storeAddress}`, "ko");
     });
-  }, [regionStores, regionStatsByStore, storeSort]);
+  }, [regionStores, regionStatsByStore, storeSort, userLocation]);
   const visibleRegionStores = useMemo(() => sortedRegionStores.filter((store) => {
     const ownItems = regionItemsByStore.get(store.id) ?? [];
     const searchText = [
@@ -474,6 +496,76 @@ function App() {
     if (nextRegions.length && view === "upload") setView("regions");
   }
 
+  function locateUser() {
+    return new Promise<{ latitude: number; longitude: number } | null>((resolve) => {
+      if (!navigator.geolocation) {
+        setLocationMessage("이 브라우저는 위치 확인을 지원하지 않습니다.");
+        resolve(null);
+        return;
+      }
+      setLocationMessage("내 위치 확인 중...");
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const next = { latitude: position.coords.latitude, longitude: position.coords.longitude };
+          setUserLocation(next);
+          setLocationMessage("내 위치가 확인되었습니다.");
+          resolve(next);
+        },
+        () => {
+          setLocationMessage("위치 권한을 허용하면 거리순과 매장지도를 사용할 수 있습니다.");
+          resolve(null);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+      );
+    });
+  }
+
+  async function geocodeStores(targetStores: SurveyStore[], modeLabel: string) {
+    const targets = targetStores.filter((store) => store.storeAddress);
+    if (!targets.length) {
+      setGeocodeMessage("좌표를 검색할 매장이 없습니다.");
+      return;
+    }
+    const estimatedSeconds = Math.max(1, targets.length);
+    const estimatedText = estimatedSeconds >= 60 ? `약 ${Math.ceil(estimatedSeconds / 60)}분` : `약 ${estimatedSeconds}초`;
+    const ok = await askConfirm({
+      title: "매장 위치 검색",
+      message: `${modeLabel} ${targets.length.toLocaleString()}개의 위치를 주소로 검색합니다.\n무료 주소검색 정책을 지키기 위해 1초에 1개씩 처리하므로 ${estimatedText} 정도 걸릴 수 있습니다.\n계속할까요?`,
+      confirmText: "시작",
+      cancelText: "취소",
+      plain: true,
+    });
+    if (!ok) return;
+    setGeocoding(true);
+    let success = 0;
+    let failed = 0;
+    try {
+      for (const [index, store] of targets.entries()) {
+        setGeocodeMessage(`좌표 검색 중 ${index + 1}/${targets.length}: ${mapSearchAddress(store.storeAddress)}`);
+        try {
+          const result = await geocodeAddress(store.storeAddress);
+          const nextStore = result
+            ? { ...store, latitude: result.latitude, longitude: result.longitude, geocodeStatus: "성공" as const, geocodedAt: now(), updatedAt: now() }
+            : { ...store, geocodeStatus: "실패" as const, geocodedAt: now(), updatedAt: now() };
+          await putStore(nextStore);
+          setStores((old) => old.map((candidate) => candidate.id === store.id ? nextStore : candidate));
+          if (result) success += 1;
+          else failed += 1;
+        } catch (error) {
+          console.error(error);
+          failed += 1;
+          const failedStore = { ...store, geocodeStatus: "실패" as const, geocodedAt: now(), updatedAt: now() };
+          await putStore(failedStore);
+          setStores((old) => old.map((candidate) => candidate.id === store.id ? failedStore : candidate));
+        }
+        if (index < targets.length - 1) await delay(1100);
+      }
+      setGeocodeMessage(`좌표 검색 완료: 성공 ${success}개 · 실패 ${failed}개`);
+    } finally {
+      setGeocoding(false);
+    }
+  }
+
   useEffect(() => {
     refresh().finally(() => setIsBooting(false));
   }, []);
@@ -527,6 +619,12 @@ function App() {
       setDragStoreId("");
     }
   }, [storeSort]);
+
+  useEffect(() => {
+    if (storeSort === "거리 순" && (!userLocation || !assignedRegionStores.some(hasStoreCoordinates))) {
+      setStoreSort("이름 순");
+    }
+  }, [storeSort, userLocation, assignedRegionStores]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -592,6 +690,18 @@ function App() {
   }
 
   async function chooseRegion(region: string) {
+    const assigned = stores.filter((store) => store.region === region && store.mapIncluded !== false);
+    const missingCoordinates = assigned.filter((store) => !hasStoreCoordinates(store)).length;
+    if (missingCoordinates > 0) {
+      const ok = await askConfirm({
+        title: "위치정보 확인",
+        message: `담당매장 중 위치정보가 없는 매장이 ${missingCoordinates.toLocaleString()}개 있습니다.\n위치정보가 없으면 매장지도와 거리순 정렬을 사용할 수 없거나 일부 매장이 보이지 않을 수 있습니다.\n그래도 작업을 시작할까요?`,
+        confirmText: "작업 시작",
+        cancelText: "취소",
+        plain: true,
+      });
+      if (!ok) return;
+    }
     const nextSettings = { ...settings, currentRegion: region };
     setSettingsState(nextSettings);
     setSelectedStoreId("");
@@ -599,6 +709,7 @@ function App() {
     setStoreQuery("");
     setItemQuery("");
     setFilter("전체");
+    setStoreSort("이름 순");
     setWorkspaceMode("list");
     setOrderEditing(false);
     setDragStoreId("");
@@ -606,6 +717,39 @@ function App() {
     setPhotos([]);
     setView("workspace");
     saveSettings(nextSettings).then(() => refresh(region));
+  }
+
+  async function openAssignment(region: string) {
+    const nextSettings = { ...settings, currentRegion: region };
+    setSettingsState(nextSettings);
+    setSelectedStoreId("");
+    setSelectedItemId("");
+    setStoreQuery("");
+    setItemQuery("");
+    setWorkspaceMode("list");
+    setStoreSort("이름 순");
+    setWorkspaceToolsOpen(false);
+    setPhotosReady(false);
+    setPhotos([]);
+    setView("assignment");
+    saveSettings(nextSettings).then(() => refresh(region));
+  }
+
+  async function finishAssignment() {
+    const assigned = regionStores.filter((store) => store.mapIncluded !== false);
+    const missingCoordinates = assigned.filter((store) => !hasStoreCoordinates(store)).length;
+    if (missingCoordinates > 0) {
+      const ok = await askConfirm({
+        title: "위치정보 확인",
+        message: `담당매장 중 위치정보가 없는 매장이 ${missingCoordinates.toLocaleString()}개 있습니다.\n위치정보를 가져오지 않으면 매장지도와 거리순 정렬을 사용할 수 없거나 일부 매장이 보이지 않을 수 있습니다.\n그래도 메인으로 돌아갈까요?`,
+        confirmText: "돌아가기",
+        cancelText: "계속 설정",
+        plain: true,
+      });
+      if (!ok) return;
+    }
+    setStoreQuery("");
+    setView("regions");
   }
 
   async function openStore(store: SurveyStore) {
@@ -899,11 +1043,12 @@ function App() {
   const canGoBack = view !== "upload" && !(view === "regions" && regions.length > 0);
   const goBack = () => {
     setMenuOpen(false);
+    if (view === "assignment") {
+      setStoreQuery("");
+      setView("regions");
+    }
+    else
     if (view === "workspace") {
-      if (workspaceMode !== "list") {
-        setWorkspaceMode("list");
-        return;
-      }
       setStoreQuery("");
       setItemQuery("");
       setView("regions");
@@ -925,7 +1070,8 @@ function App() {
   };
   const screenTitle =
     view === "regions" ? "메인"
-    : view === "workspace" ? workspaceMode === "map" ? "매장지도" : workspaceMode === "assignment" ? "담당매장 설정" : "매장리스트"
+    : view === "assignment" ? "담당매장 설정"
+    : view === "workspace" ? workspaceMode === "map" ? "매장지도" : "매장리스트"
     : view === "store" ? "매장정보"
     : view === "items" ? "물품리스트"
     : view === "item" ? "가격정보"
@@ -1026,8 +1172,16 @@ function App() {
             {regions.filter((region) => region.name.includes(regionQuery)).map((region) => {
               const summary = regionSummary(region.name);
               return (
-                <article className="card" key={region.name}>
-                  <h2>{region.name}</h2>
+                <article className="card region-card" key={region.name}>
+                  <div className="region-card-head">
+                    <h2>{region.name}</h2>
+                    <details className="card-menu subtle-menu">
+                      <summary aria-label={`${region.name} 메뉴`}><MoreVertical size={18} /></summary>
+                      <div className="menu-popover">
+                        <button type="button" onClick={() => openAssignment(region.name)}>담당매장 설정</button>
+                      </div>
+                    </details>
+                  </div>
                   <p className="area-summary">{region.areaSummary || region.city || "-"}</p>
                   <p className="muted">담당부서: {region.department || "-"}</p>
                   <RegionSummary stats={summary.total ? summary : emptyStats} itemStats={summarize(items.filter((item) => item.region === region.name), region.name === currentRegion ? photos : [])} />
@@ -1047,7 +1201,7 @@ function App() {
       {view === "workspace" && currentRegion && (
         <main className="page">
           <div className="sticky-search workspace-search">
-            <SearchBox value={storeQuery} onChange={setStoreQuery} placeholder={workspaceMode === "assignment" ? "매장명 / 주소 검색" : "매장명 / 주소 / 품목명 / 품목코드 / 바코드"} />
+            <SearchBox value={storeQuery} onChange={setStoreQuery} placeholder="매장명 / 주소 / 품목명 / 품목코드 / 바코드" />
             {workspaceMode === "list" && <button className="tool-toggle" onClick={() => setWorkspaceToolsOpen((value) => !value)} aria-expanded={workspaceToolsOpen}>
               <SlidersHorizontal size={18} /> 필터 {workspaceToolsOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </button>}
@@ -1055,20 +1209,21 @@ function App() {
           <nav className="workspace-tabs" aria-label="매장 보기 방식">
             <button type="button" className={workspaceMode === "list" ? "active" : ""} onClick={() => setWorkspaceMode("list")}>매장 리스트</button>
             <button type="button" className={workspaceMode === "map" ? "active" : ""} onClick={() => setWorkspaceMode("map")}>매장 지도</button>
-            <button type="button" className={workspaceMode === "assignment" ? "active" : ""} onClick={() => setWorkspaceMode("assignment")}>담당매장 설정</button>
           </nav>
           {workspaceToolsOpen && workspaceMode === "list" && (
             <section className="tool-panel">
               <FilterBar filter={filter} setFilter={setFilter} />
               <label className="sort-control sort-only">
                 <select value={storeSort} onChange={(event) => setStoreSort(event.target.value as StoreSort)}>
-                  <option>임의 지정 순</option>
-                  <option>주소순</option>
+                  <option>이름 순</option>
                   <option>미완료 많은 순</option>
                   <option>품목 많은 순</option>
-                  <option>사진누락 많은 순</option>
+                  <option>임의 지정 순</option>
+                  <option disabled={!userLocation || !assignedRegionStores.some(hasStoreCoordinates)}>거리 순</option>
                 </select>
               </label>
+              <button type="button" className="order-edit-toggle" onClick={locateUser}>내 위치 확인</button>
+              {storeSort === "거리 순" && (!userLocation || !assignedRegionStores.some(hasStoreCoordinates)) && <p className="small-help warn">거리순은 내 위치와 매장 위치정보가 있을 때 사용할 수 있습니다.</p>}
               {storeSort === "임의 지정 순" && (
                 <button
                   className={`order-edit-toggle ${orderEditing ? "active" : ""}`}
@@ -1097,6 +1252,7 @@ function App() {
                   onOpen={() => openStore(store)}
                   onContacts={() => setContactStoreId(store.id)}
                   onAssignToggle={() => setStoreAssigned(store, store.mapIncluded === false)}
+                  distanceText={userLocation && hasStoreCoordinates(store) ? formatDistance(distanceKm(userLocation, { latitude: store.latitude!, longitude: store.longitude! })) : ""}
                   onOrderChange={(value) => saveVisitOrder(store, value)}
                   onMoveUp={() => moveVisitOrder(store, -1)}
                   onMoveDown={() => moveVisitOrder(store, 1)}
@@ -1114,25 +1270,36 @@ function App() {
               region={currentRegion}
               stores={assignedRegionStores}
               statsByStore={regionStatsByStore}
-              askConfirm={askConfirm}
+              userLocation={userLocation}
+              locationMessage={locationMessage}
+              onLocate={locateUser}
               onOpen={(store) => openStore(store)}
+              onContacts={(store) => setContactStoreId(store.id)}
               onToggle={(store) => setStoreAssigned(store, false)}
-              onCoordinateUpdate={async (store, patch) => {
-                const nextStore = { ...store, ...patch, geocodedAt: now(), updatedAt: now() };
-                await putStore(nextStore);
-                setStores((old) => old.map((candidate) => candidate.id === store.id ? nextStore : candidate));
-              }}
             />
           )}
-          {workspaceMode === "assignment" && (
-            <StoreAssignmentPanel
-              stores={assignmentVisibleStores}
-              totalStores={regionStores.length}
-              statsByStore={regionStatsByStore}
-              onAssign={setStoreAssigned}
-              onAssignAll={setStoresAssigned}
-            />
-          )}
+        </main>
+      )}
+
+      {view === "assignment" && currentRegion && (
+        <main className="page">
+          <div className="sticky-search workspace-search assignment-search">
+            <SearchBox value={storeQuery} onChange={setStoreQuery} placeholder="매장명 / 주소 검색" />
+          </div>
+          <StoreAssignmentPanel
+            stores={assignmentVisibleStores}
+            totalStores={regionStores.length}
+            statsByStore={regionStatsByStore}
+            geocoding={geocoding}
+            geocodeMessage={geocodeMessage}
+            locationMessage={locationMessage}
+            onLocate={locateUser}
+            onGeocodeMissing={() => geocodeStores(regionStores.filter((store) => store.mapIncluded !== false && !hasStoreCoordinates(store)), "위치정보가 없는 담당매장")}
+            onGeocodeAll={() => geocodeStores(regionStores.filter((store) => store.mapIncluded !== false), "담당매장")}
+            onAssign={setStoreAssigned}
+            onAssignAll={setStoresAssigned}
+            onSave={finishAssignment}
+          />
         </main>
       )}
 
@@ -1490,6 +1657,7 @@ function StoreCard({
   onDragOver,
   onDrop,
   onDragEnd,
+  distanceText,
 }: {
   store: SurveyStore;
   stats: RegionStats;
@@ -1507,6 +1675,7 @@ function StoreCard({
   onDragOver: (event: DragEvent<HTMLElement>) => void;
   onDrop: () => void;
   onDragEnd: () => void;
+  distanceText?: string;
 }) {
   const completed = items.filter((item) => item.status === "완료");
   const latestSurveyDate = completed.map((item) => item.surveyDate).filter(Boolean).sort().at(-1) ?? "-";
@@ -1555,6 +1724,7 @@ function StoreCard({
       </div>
       <div className="store-meta">
         {stats.photoMissing > 0 && <span className="store-missing">품목사진 누락 {stats.photoMissing.toLocaleString()}건</span>}
+        {distanceText && <span className="store-distance">현재 위치 {distanceText}</span>}
         <span className="store-date">조사일: {latestSurveyDate}</span>
       </div>
       <div className="card-actions">
@@ -1565,17 +1735,14 @@ function StoreCard({
   );
 }
 
-function StoreMapView({ region, stores, statsByStore, askConfirm, onOpen, onToggle, onCoordinateUpdate }: { region: string; stores: SurveyStore[]; statsByStore: Map<string, RegionStats>; askConfirm: (options: ConfirmState) => Promise<boolean>; onOpen: (store: SurveyStore) => void; onToggle: (store: SurveyStore) => void | Promise<void>; onCoordinateUpdate: (store: SurveyStore, patch: Partial<SurveyStore>) => void | Promise<void> }) {
+function StoreMapView({ region, stores, statsByStore, userLocation, locationMessage, onLocate, onOpen, onContacts, onToggle }: { region: string; stores: SurveyStore[]; statsByStore: Map<string, RegionStats>; userLocation: { latitude: number; longitude: number } | null; locationMessage: string; onLocate: () => Promise<{ latitude: number; longitude: number } | null>; onOpen: (store: SurveyStore) => void; onContacts: (store: SurveyStore) => void; onToggle: (store: SurveyStore) => void | Promise<void> }) {
   const mapNode = useRef<HTMLDivElement | null>(null);
   const [activeStoreId, setActiveStoreId] = useState(stores.find(hasStoreCoordinates)?.id ?? "");
-  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [locationMessage, setLocationMessage] = useState("");
-  const [geocodeMessage, setGeocodeMessage] = useState("");
-  const [geocoding, setGeocoding] = useState(false);
   const mappedStores = stores.filter(hasStoreCoordinates);
   const missingStores = stores.filter((store) => !hasStoreCoordinates(store));
   const activeStore = stores.find((store) => store.id === activeStoreId);
   const completedCount = stores.filter((store) => isStoreComplete(store, statsByStore.get(store.id) ?? emptyStats)).length;
+  const mapBlocked = !userLocation || mappedStores.length === 0;
   const mapSignature = [
     mappedStores.map((store) => `${store.id}:${store.latitude}:${store.longitude}:${isStoreComplete(store, statsByStore.get(store.id) ?? emptyStats) ? "1" : "0"}`).join("|"),
     activeStoreId,
@@ -1621,7 +1788,8 @@ function StoreMapView({ region, stores, statsByStore, askConfirm, onOpen, onTogg
           fillOpacity: 0.9,
         }).addTo(map).bindTooltip("내 위치");
       }
-      if (bounds.length) map.fitBounds(leaflet.latLngBounds(bounds), { padding: [28, 28], maxZoom: 15 });
+      if (userLocation) map.setView([userLocation.latitude, userLocation.longitude], 14);
+      else if (bounds.length) map.fitBounds(leaflet.latLngBounds(bounds), { padding: [28, 28], maxZoom: 15 });
       else map.setView([36.5, 127.8], 7);
     });
     return () => {
@@ -1629,66 +1797,6 @@ function StoreMapView({ region, stores, statsByStore, askConfirm, onOpen, onTogg
       map?.remove();
     };
   }, [mapSignature, mappedStores, statsByStore, activeStoreId, userLocation]);
-
-  const locateMe = () => {
-    if (!navigator.geolocation) {
-      setLocationMessage("이 브라우저는 위치 확인을 지원하지 않습니다.");
-      return;
-    }
-    setLocationMessage("내 위치 확인 중...");
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setUserLocation({ latitude: position.coords.latitude, longitude: position.coords.longitude });
-        setLocationMessage("내 위치가 표시되었습니다.");
-      },
-      () => setLocationMessage("위치 권한을 허용하면 내 위치를 표시할 수 있습니다."),
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
-    );
-  };
-  const geocodeStores = async (mode: "missing" | "all") => {
-    const targets = (mode === "all" ? stores : missingStores).filter((store) => store.storeAddress);
-    if (!targets.length) {
-      setGeocodeMessage("좌표를 검색할 매장이 없습니다.");
-      return;
-    }
-    const estimatedSeconds = Math.max(1, targets.length);
-    const estimatedText = estimatedSeconds >= 60 ? `약 ${Math.ceil(estimatedSeconds / 60)}분` : `약 ${estimatedSeconds}초`;
-    const ok = await askConfirm({
-      title: "매장 위치 검색",
-      message: `담당매장 ${targets.length.toLocaleString()}개의 위치를 주소로 검색합니다.\n무료 주소검색 정책을 지키기 위해 1초에 1개씩 처리하므로 ${estimatedText} 정도 걸릴 수 있습니다.\n계속할까요?`,
-      confirmText: "시작",
-      cancelText: "취소",
-      plain: true,
-    });
-    if (!ok) return;
-    setGeocoding(true);
-    let success = 0;
-    let failed = 0;
-    try {
-      for (const [index, store] of targets.entries()) {
-        setGeocodeMessage(`좌표 검색 중 ${index + 1}/${targets.length}: ${mapSearchAddress(store.storeAddress)}`);
-        try {
-          const result = await geocodeAddress(store.storeAddress);
-          if (result) {
-            success += 1;
-            await onCoordinateUpdate(store, { latitude: result.latitude, longitude: result.longitude, geocodeStatus: "성공" });
-            if (!activeStoreId) setActiveStoreId(store.id);
-          } else {
-            failed += 1;
-            await onCoordinateUpdate(store, { geocodeStatus: "실패" });
-          }
-        } catch (error) {
-          console.error(error);
-          failed += 1;
-          await onCoordinateUpdate(store, { geocodeStatus: "실패" });
-        }
-        if (index < targets.length - 1) await delay(1100);
-      }
-      setGeocodeMessage(`좌표 검색 완료: 성공 ${success}개 · 실패 ${failed}개`);
-    } finally {
-      setGeocoding(false);
-    }
-  };
 
   return (
     <div className="map-page">
@@ -1698,22 +1806,32 @@ function StoreMapView({ region, stores, statsByStore, askConfirm, onOpen, onTogg
           <span>담당매장 {stores.length.toLocaleString()}개 · 완료 {completedCount.toLocaleString()}개 · 미완료 {(stores.length - completedCount).toLocaleString()}개</span>
         </div>
         <div className="map-summary-actions">
-          <button type="button" onClick={() => geocodeStores("missing")} disabled={geocoding || missingStores.length === 0}>{geocoding ? "검색 중" : "추가 위치"}</button>
-          <button type="button" onClick={() => geocodeStores("all")} disabled={geocoding || stores.length === 0}>전체 갱신</button>
-          <button type="button" onClick={locateMe}>내 위치</button>
+          <button type="button" onClick={onLocate}>내 위치 확인</button>
         </div>
       </section>
       {locationMessage && <p className="map-location-message">{locationMessage}</p>}
-      {geocodeMessage && <p className="map-location-message">{geocodeMessage}</p>}
-      <section className="map-panel">
-        <div ref={mapNode} className="store-map" />
-      </section>
+      {mapBlocked ? (
+        <section className="panel map-blocked">
+          <h2>매장지도를 보려면 위치정보가 필요합니다.</h2>
+          <p>담당매장 설정에서 매장 위치정보를 가져오고, 내 위치 확인을 허용하면 지도를 볼 수 있습니다.</p>
+          <button type="button" className="primary" onClick={onLocate}>내 위치 확인</button>
+        </section>
+      ) : (
+        <section className="map-panel">
+          <div ref={mapNode} className="store-map" />
+        </section>
+      )}
       <section className="panel map-active-panel">
         {activeStore ? (
           <>
+            {(() => {
+              const stats = statsByStore.get(activeStore.id) ?? emptyStats;
+              return <span className="map-active-stat">물품 {stats.completed.toLocaleString()}/{stats.total.toLocaleString()} · {isStoreComplete(activeStore, stats) ? "완료" : "미완료"}</span>;
+            })()}
             <h2>{activeStore.storeName}</h2>
             <p>{activeStore.storeAddress || "주소 없음"}</p>
             <div className="map-active-actions">
+              <button type="button" onClick={() => onContacts(activeStore)}>담당자 정보</button>
               <button type="button" className="primary" onClick={() => onOpen(activeStore)}>입력</button>
               <button type="button" onClick={() => onToggle(activeStore)}>담당매장 제외</button>
             </div>
@@ -1740,14 +1858,15 @@ function StoreMapView({ region, stores, statsByStore, askConfirm, onOpen, onTogg
   );
 }
 
-function StoreAssignmentPanel({ stores, totalStores, statsByStore, onAssign, onAssignAll }: { stores: SurveyStore[]; totalStores: number; statsByStore: Map<string, RegionStats>; onAssign: (store: SurveyStore, assigned: boolean) => void | Promise<void>; onAssignAll: (stores: SurveyStore[], assigned: boolean) => void | Promise<void> }) {
+function StoreAssignmentPanel({ stores, totalStores, statsByStore, geocoding, geocodeMessage, locationMessage, onLocate, onGeocodeMissing, onGeocodeAll, onAssign, onAssignAll, onSave }: { stores: SurveyStore[]; totalStores: number; statsByStore: Map<string, RegionStats>; geocoding: boolean; geocodeMessage: string; locationMessage: string; onLocate: () => Promise<{ latitude: number; longitude: number } | null>; onGeocodeMissing: () => void | Promise<void>; onGeocodeAll: () => void | Promise<void>; onAssign: (store: SurveyStore, assigned: boolean) => void | Promise<void>; onAssignAll: (stores: SurveyStore[], assigned: boolean) => void | Promise<void>; onSave: () => void | Promise<void> }) {
   const assignedCount = stores.filter((store) => store.mapIncluded !== false).length;
+  const missingCoordinateCount = stores.filter((store) => store.mapIncluded !== false && !hasStoreCoordinates(store)).length;
   return (
     <section className="panel assignment-panel">
       <div className="assignment-head">
         <div>
           <h2>담당매장 설정</h2>
-          <p>체크한 매장만 매장리스트와 매장지도에 표시됩니다.</p>
+          <p>체크한 매장만 매장리스트와 매장지도에 표시됩니다. 위치정보를 가져오면 지도와 거리순을 사용할 수 있습니다.</p>
         </div>
         <strong>{assignedCount.toLocaleString()}<small>/{stores.length.toLocaleString()}</small></strong>
       </div>
@@ -1756,6 +1875,14 @@ function StoreAssignmentPanel({ stores, totalStores, statsByStore, onAssign, onA
         <button type="button" onClick={() => onAssignAll(stores, false)}>전체 해제</button>
         <span>지역 전체 {totalStores.toLocaleString()}개</span>
       </div>
+      <div className="assignment-location-actions">
+        <button type="button" onClick={onLocate}>내 위치 확인</button>
+        <button type="button" onClick={onGeocodeMissing} disabled={geocoding || missingCoordinateCount === 0}>{geocoding ? "검색 중" : "없는 위치만 가져오기"}</button>
+        <button type="button" onClick={onGeocodeAll} disabled={geocoding || assignedCount === 0}>전체 위치 다시 가져오기</button>
+      </div>
+      {locationMessage && <p className="map-location-message">{locationMessage}</p>}
+      {geocodeMessage && <p className="map-location-message">{geocodeMessage}</p>}
+      {missingCoordinateCount > 0 && <p className="small-help warn">위치정보 없는 담당매장 {missingCoordinateCount.toLocaleString()}개</p>}
       <div className="assignment-list">
         {stores.map((store, index) => {
           const stats = statsByStore.get(store.id) ?? emptyStats;
@@ -1771,6 +1898,7 @@ function StoreAssignmentPanel({ stores, totalStores, statsByStore, onAssign, onA
         })}
         {!stores.length && <p className="muted">검색 결과가 없습니다.</p>}
       </div>
+      <button type="button" className="primary assignment-save" onClick={onSave}>저장하고 메인으로</button>
     </section>
   );
 }
