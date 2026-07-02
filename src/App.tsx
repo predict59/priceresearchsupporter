@@ -75,7 +75,7 @@ const formatBytes = (value?: number) => {
   }
   return `${size.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
 };
-const conservativeQuota = (quota?: number) => quota ? Math.floor(Math.min(quota * 0.6, 2 * 1024 * 1024 * 1024)) : 0;
+const availableStorageBytes = (estimate?: StorageEstimate) => Math.max(0, (estimate?.quota ?? 0) - (estimate?.usage ?? 0));
 const distanceKm = (from: { latitude: number; longitude: number }, to: { latitude: number; longitude: number }) => {
   const rad = (value: number) => value * Math.PI / 180;
   const earth = 6371;
@@ -436,11 +436,11 @@ function App() {
     return true;
   }), [sortedRegionStores, storeQuery, regionItemsByStore, regionStatsByStore, filter, photosReady]);
   const assignedVisibleRegionStores = useMemo(
-    () => visibleRegionStores.filter((store) => store.mapIncluded !== false),
+    () => visibleRegionStores.filter((store) => store.mapIncluded === true),
     [visibleRegionStores],
   );
   const assignedRegionStores = useMemo(
-    () => sortedRegionStores.filter((store) => store.mapIncluded !== false),
+    () => sortedRegionStores.filter((store) => store.mapIncluded === true),
     [sortedRegionStores],
   );
   const canUseStoreMap = Boolean(userLocation);
@@ -709,7 +709,7 @@ function App() {
   }
 
   async function finishAssignment() {
-    const assigned = regionStores.filter((store) => store.mapIncluded !== false);
+    const assigned = regionStores.filter((store) => store.mapIncluded === true);
     const missingCoordinates = assigned.filter((store) => !hasStoreCoordinates(store)).length;
     if (missingCoordinates > 0) {
       const ok = await askConfirm({
@@ -965,7 +965,7 @@ function App() {
   }
 
   const regionSummary = (region: string, assignedOnly = false) => {
-    const regionStoresForSummary = stores.filter((store) => store.region === region && (!assignedOnly || store.mapIncluded !== false));
+    const regionStoresForSummary = stores.filter((store) => store.region === region && (!assignedOnly || store.mapIncluded === true));
     const storeIds = new Set(regionStoresForSummary.map((store) => store.id));
     const regionItemsForSummary = items.filter((item) => item.region === region);
     const completed = regionStoresForSummary.filter((store) => {
@@ -1114,7 +1114,7 @@ function App() {
               const summary = regionSummary(region.name);
               const assignedSummary = regionSummary(region.name, true);
               const regionStoreIds = new Set(stores.filter((store) => store.region === region.name).map((store) => store.id));
-              const assignedStoreIds = new Set(stores.filter((store) => store.region === region.name && store.mapIncluded !== false).map((store) => store.id));
+              const assignedStoreIds = new Set(stores.filter((store) => store.region === region.name && store.mapIncluded === true).map((store) => store.id));
               const regionPhotos = region.name === currentRegion ? photos : [];
               const allItemStats = summarize(items.filter((item) => item.region === region.name), regionPhotos);
               const assignedItemStats = summarize(items.filter((item) => item.region === region.name && assignedStoreIds.has(item.storeId)), regionPhotos);
@@ -1196,7 +1196,7 @@ function App() {
                   focused={selectedStoreId === store.id}
                   onOpen={() => openStore(store)}
                   onContacts={() => setContactStoreId(store.id)}
-                  onAssignToggle={() => setStoreAssigned(store, store.mapIncluded === false)}
+                  onAssignToggle={() => setStoreAssigned(store, store.mapIncluded !== true)}
                   distanceText={userLocation && hasStoreCoordinates(store) ? formatDistance(distanceKm(userLocation, { latitude: store.latitude!, longitude: store.longitude! })) : ""}
                 />
               );
@@ -1233,8 +1233,8 @@ function App() {
             geocodeMessage={geocodeMessage}
             locationMessage={locationMessage}
             onLocate={locateUser}
-            onGeocodeMissing={() => geocodeStores(regionStores.filter((store) => store.mapIncluded !== false && !hasStoreCoordinates(store)), "위치정보가 없는 담당매장")}
-            onGeocodeAll={() => geocodeStores(regionStores.filter((store) => store.mapIncluded !== false), "담당매장")}
+            onGeocodeMissing={() => geocodeStores(regionStores.filter((store) => store.mapIncluded === true && !hasStoreCoordinates(store)), "위치정보가 없는 담당매장")}
+            onGeocodeAll={() => geocodeStores(regionStores.filter((store) => store.mapIncluded === true), "담당매장")}
             onAssign={setStoreAssigned}
             onAssignAll={setStoresAssigned}
             onSave={finishAssignment}
@@ -1456,8 +1456,8 @@ function PhotoPreview({ photo, className = "" }: { photo?: SurveyPhoto; classNam
 function StorageModal({ estimate, photoCount, onRefresh, onClose }: { estimate?: StorageEstimate; photoCount: number; onRefresh: () => void; onClose: () => void }) {
   const used = estimate?.usage ?? 0;
   const quota = estimate?.quota ?? 0;
-  const safeQuota = conservativeQuota(quota);
-  const percent = safeQuota ? Math.min(100, Math.round((used / safeQuota) * 100)) : 0;
+  const available = availableStorageBytes(estimate);
+  const percent = quota ? Math.min(100, Math.round((used / quota) * 100)) : 0;
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true">
       <section className="modal">
@@ -1471,10 +1471,10 @@ function StorageModal({ estimate, photoCount, onRefresh, onClose }: { estimate?:
         <div className="storage-meter">
           <div><strong>{photoCount.toLocaleString()}장</strong><span>저장 사진 수</span></div>
           <div><strong>{formatBytes(used)}</strong><span>사용 중</span></div>
-          <div><strong>{formatBytes(safeQuota)}</strong><span>예상 한도</span></div>
+          <div><strong>{formatBytes(available)}</strong><span>여유공간</span></div>
         </div>
         <div className="progress-line storage-progress"><span style={{ width: `${percent}%` }} /></div>
-        <p className="small-help">브라우저가 알려주는 한도보다 낮게 잡아 표시합니다. 실제 저장 가능 용량은 기기와 브라우저 정책에 따라 달라질 수 있으니 조사 중에는 지역별 백업을 자주 내려받아 주세요.</p>
+        <p className="small-help">브라우저가 알려준 저장공간 기준입니다. 실제 저장 가능 용량은 기기 여유공간과 브라우저 정책에 따라 달라질 수 있으니 조사 중에는 지역별 백업을 자주 내려받아 주세요.</p>
         <button onClick={onRefresh}>다시 확인</button>
       </section>
     </div>
@@ -1583,7 +1583,7 @@ function StoreMoreMenu({ store, onAssignToggle }: { store: SurveyStore; onAssign
     <details className="card-menu">
       <summary aria-label="매장 메뉴"><MoreVertical size={18} /></summary>
       <div className="menu-popover">
-        <button type="button" onClick={onAssignToggle}>{store.mapIncluded === false ? "담당매장 포함" : "담당매장 제외"}</button>
+        <button type="button" onClick={onAssignToggle}>{store.mapIncluded === true ? "담당매장 제외" : "담당매장 포함"}</button>
         {mapLinks(store.storeAddress).map(([name, href]) => <a key={name} href={href} target="_blank">{name} 지도 보기</a>)}
       </div>
     </details>
@@ -1624,7 +1624,7 @@ function StoreCard({
         </div>
         <StoreMoreMenu store={store} onAssignToggle={onAssignToggle} />
       </div>
-      {store.mapIncluded === false && <span className="map-excluded-badge">담당 제외</span>}
+      {store.mapIncluded !== true && <span className="map-excluded-badge">담당 미선택</span>}
       <div className="store-progress">
         <div className="store-metric-row">
           <span>물품</span>
@@ -1780,8 +1780,8 @@ function StoreMapView({ stores, statsByStore, userLocation, locationMessage, sel
 }
 
 function StoreAssignmentPanel({ stores, totalStores, statsByStore, geocoding, geocodeMessage, locationMessage, onLocate, onGeocodeMissing, onGeocodeAll, onAssign, onAssignAll, onSave }: { stores: SurveyStore[]; totalStores: number; statsByStore: Map<string, RegionStats>; geocoding: boolean; geocodeMessage: string; locationMessage: string; onLocate: () => Promise<{ latitude: number; longitude: number } | null>; onGeocodeMissing: () => void | Promise<void>; onGeocodeAll: () => void | Promise<void>; onAssign: (store: SurveyStore, assigned: boolean) => void | Promise<void>; onAssignAll: (stores: SurveyStore[], assigned: boolean) => void | Promise<void>; onSave: () => void | Promise<void> }) {
-  const assignedCount = stores.filter((store) => store.mapIncluded !== false).length;
-  const missingCoordinateCount = stores.filter((store) => store.mapIncluded !== false && !hasStoreCoordinates(store)).length;
+  const assignedCount = stores.filter((store) => store.mapIncluded === true).length;
+  const missingCoordinateCount = stores.filter((store) => store.mapIncluded === true && !hasStoreCoordinates(store)).length;
   return (
     <section className="panel assignment-panel">
       <div className="assignment-head">
@@ -1808,8 +1808,8 @@ function StoreAssignmentPanel({ stores, totalStores, statsByStore, geocoding, ge
         {stores.map((store, index) => {
           const stats = statsByStore.get(store.id) ?? emptyStats;
           return (
-            <label key={store.id} className={`assignment-row ${store.mapIncluded !== false ? "selected" : ""}`}>
-              <input type="checkbox" checked={store.mapIncluded !== false} onChange={(event) => onAssign(store, event.target.checked)} />
+            <label key={store.id} className={`assignment-row ${store.mapIncluded === true ? "selected" : ""}`}>
+              <input type="checkbox" checked={store.mapIncluded === true} onChange={(event) => onAssign(store, event.target.checked)} />
               <span className="assignment-order">{index + 1}</span>
               <span className="assignment-name" title={store.storeName}>{store.storeName}</span>
               <span className="assignment-address">{store.storeAddress || "주소 없음"}</span>
