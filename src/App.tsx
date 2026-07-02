@@ -682,8 +682,8 @@ function App() {
       setView("regions");
     } catch (error) {
       console.error(error);
-      setAnalysis("자료 분석 실패: 엑셀 파일을 확인해 주세요. 모바일에서는 고화질 바코드 파일 대신 기본 조사표를 먼저 사용해 보세요.");
-      alert("자료 분석에 실패했습니다. 고화질 바코드 파일은 모바일에서 무거울 수 있어 기본 조사표로 먼저 시도해 주세요.");
+      setAnalysis("자료 분석 실패: 조사표와 연락처 엑셀 파일을 확인해 주세요.");
+      alert("자료 분석에 실패했습니다. 조사표와 연락처 엑셀 파일을 확인해 주세요.");
     } finally {
       setIsAnalyzing(false);
     }
@@ -1144,10 +1144,6 @@ function App() {
             <label className="file-card">매장 연락처 엑셀
               <input type="file" accept={EXCEL_ACCEPT} onChange={(event) => setContactFile(event.target.files?.[0] ?? null)} />
               <span>{contactFile?.name ?? "연락처 파일이 있으면 함께 선택하세요"}</span>
-            </label>
-            <label className="file-card optional">바코드 포함 조사표
-              <input type="file" accept={EXCEL_ACCEPT} />
-              <span>선택사항</span>
             </label>
             <button className="primary analyze-button" onClick={analyzeFiles} disabled={isAnalyzing}><Upload size={18} />{isAnalyzing ? "자료 분석 중..." : "자료 분석 시작"}</button>
             {analysis && <p className="notice">{analysis}</p>}
