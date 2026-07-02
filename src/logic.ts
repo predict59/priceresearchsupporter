@@ -7,7 +7,7 @@ export function photosForItem(item: SurveyItem, storePhotos: SurveyPhoto[]) {
 export function requiredPhotoLabels(item: SurveyItem, photos: SurveyPhoto[]) {
   const hasFront = photos.some((photo) => photo.type === "STORE_FRONT");
   const missing = productPhotoMissingLabels(item, photos);
-  if (!hasFront) return ["마트사진", ...missing];
+  if (!hasFront) return ["매장사진", ...missing];
   return missing;
 }
 
@@ -60,7 +60,18 @@ export function safeFilePart(value: string) {
 }
 
 export function mapSearchAddress(address: string) {
-  return address.replace(/^\s*\(?\d{5}\)?\s*/g, "").trim();
+  const normalized = address
+    .replace(/^\s*\(?\d{5}\)?\s*/g, "")
+    .replace(/\s+/g, " ")
+    .replace(/\s*\.\s*/g, " ")
+    .trim();
+  const road = normalized.match(/^(.+?(?:번안길|번길|대로|로|길)\s*\d+(?:-\d+)?)/);
+  if (road) return road[1].trim();
+  const lot = normalized.match(/^(.+?(?:읍|면|동|리)\s+\d+(?:-\d+)?)/);
+  if (lot) return lot[1].trim();
+  return normalized
+    .split(/\s+(?:매장|매대|코너|진열|상온|냉장|냉동|음료|스낵|입구|안쪽|내부|계산대|대상웰라이프|정관장)\b/)[0]
+    .trim();
 }
 
 export async function downloadBlob(blob: Blob, filename: string) {

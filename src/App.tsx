@@ -7,9 +7,10 @@ import { dataUrlToBlob, exportBackup, exportRegionExcel, exportRegionZip } from 
 import { mapSearchAddress, requiredPhotoLabels, summarize } from "./logic";
 import type { AppSettings, BackupPayload, PhotoType, Region, RegionStats, StoreOperatingStatus, SurveyItem, SurveyPhoto, SurveyStore } from "./types";
 
-type View = "upload" | "regions" | "workspace" | "map" | "store" | "items" | "item" | "backup" | "validation";
+type View = "upload" | "regions" | "workspace" | "store" | "items" | "item" | "backup" | "validation";
 type Filter = "전체" | "미완료" | "미조사" | "조사중" | "완료" | "사진누락";
 type StoreSort = "임의 지정 순" | "주소순" | "품목 많은 순" | "미완료 많은 순" | "사진누락 많은 순";
+type WorkspaceMode = "list" | "map" | "assignment";
 type ConfirmState = {
   title: string;
   message: string;
@@ -357,6 +358,7 @@ function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [storeSort, setStoreSort] = useState<StoreSort>("주소순");
+  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("list");
   const [orderEditing, setOrderEditing] = useState(false);
   const [dragStoreId, setDragStoreId] = useState("");
   const [workspaceToolsOpen, setWorkspaceToolsOpen] = useState(false);
@@ -417,6 +419,26 @@ function App() {
     if (filter === "사진누락" && ownStats.photoMissing === 0) return false;
     return true;
   }), [sortedRegionStores, storeQuery, regionItemsByStore, regionStatsByStore, filter, photosReady]);
+  const assignedVisibleRegionStores = useMemo(
+    () => visibleRegionStores.filter((store) => store.mapIncluded !== false),
+    [visibleRegionStores],
+  );
+  const assignedRegionStores = useMemo(
+    () => sortedRegionStores.filter((store) => store.mapIncluded !== false),
+    [sortedRegionStores],
+  );
+  const assignmentVisibleStores = useMemo(() => {
+    const query = storeQuery.trim();
+    if (!query) return sortedRegionStores;
+    return sortedRegionStores.filter((store) => {
+      const ownItems = regionItemsByStore.get(store.id) ?? [];
+      return [
+        store.storeName,
+        store.storeAddress,
+        ...ownItems.flatMap((item) => [item.itemNo, item.productName, item.barcode]),
+      ].join(" ").includes(query);
+    });
+  }, [sortedRegionStores, storeQuery, regionItemsByStore]);
   const selectedStore = stores.find((store) => store.id === selectedStoreId);
   const storeItems = useMemo(() => items.filter((item) => item.storeId === selectedStoreId), [items, selectedStoreId]);
   const selectedItem = items.find((item) => item.id === selectedItemId);
@@ -577,6 +599,7 @@ function App() {
     setStoreQuery("");
     setItemQuery("");
     setFilter("전체");
+    setWorkspaceMode("list");
     setOrderEditing(false);
     setDragStoreId("");
     setPhotosReady(false);
@@ -629,6 +652,19 @@ function App() {
     await refresh(currentRegion);
   }
 
+  async function setStoreAssigned(store: SurveyStore, assigned: boolean) {
+    const nextStore = { ...store, mapIncluded: assigned, updatedAt: now() };
+    await putStore(nextStore);
+    setStores((old) => old.map((candidate) => candidate.id === store.id ? nextStore : candidate));
+  }
+
+  async function setStoresAssigned(targetStores: SurveyStore[], assigned: boolean) {
+    const updated = targetStores.map((store) => ({ ...store, mapIncluded: assigned, updatedAt: now() }));
+    await Promise.all(updated.map(putStore));
+    const updates = new Map(updated.map((store) => [store.id, store]));
+    setStores((old) => old.map((store) => updates.get(store.id) ?? store));
+  }
+
   async function saveStorePhoto(file: File) {
     if (!selectedStore) return;
     if (selectedStore.frontPhotoId) await deletePhoto(selectedStore.frontPhotoId);
@@ -672,8 +708,8 @@ function App() {
     if (!selectedStore) return;
     if (!selectedStore.frontPhotoId) {
       await askConfirm({
-        title: "마트 전경사진이 필요합니다",
-        message: "마트 상태는 전경사진을 먼저 등록한 뒤 전환할 수 있습니다.",
+        title: "매장 전경사진이 필요합니다",
+        message: "매장 상태는 전경사진을 먼저 등록한 뒤 전환할 수 있습니다.",
         confirmText: "확인",
         cancelText: "닫기",
       });
@@ -864,11 +900,14 @@ function App() {
   const goBack = () => {
     setMenuOpen(false);
     if (view === "workspace") {
+      if (workspaceMode !== "list") {
+        setWorkspaceMode("list");
+        return;
+      }
       setStoreQuery("");
       setItemQuery("");
       setView("regions");
     }
-    else if (view === "map") setView("workspace");
     else if (view === "store") setView("workspace");
     else if (view === "items") {
       setItemQuery("");
@@ -886,9 +925,8 @@ function App() {
   };
   const screenTitle =
     view === "regions" ? "메인"
-    : view === "workspace" ? "마트리스트"
-    : view === "map" ? "지도"
-    : view === "store" ? "마트정보"
+    : view === "workspace" ? workspaceMode === "map" ? "매장지도" : workspaceMode === "assignment" ? "담당매장 설정" : "매장리스트"
+    : view === "store" ? "매장정보"
     : view === "items" ? "물품리스트"
     : view === "item" ? "가격정보"
     : view === "validation" ? "검증"
@@ -945,7 +983,7 @@ function App() {
           <section className="upload-hero">
             <span>초기 설정</span>
             <h1>조사자료 업로드</h1>
-            <p>조사표와 마트 연락처 엑셀을 불러오면 현장 입력에 필요한 지역, 마트, 품목 목록이 자동으로 구성됩니다.</p>
+            <p>조사표와 매장 연락처 엑셀을 불러오면 현장 입력에 필요한 지역, 매장, 품목 목록이 자동으로 구성됩니다.</p>
             <ul className="upload-notes">
               <li>입력 자료와 조사 결과는 서버가 아닌 현재 기기의 브라우저 저장공간에 보관됩니다.</li>
               <li>인터넷이 불안정한 현장에서도 입력과 사진 첨부를 계속할 수 있습니다.</li>
@@ -957,7 +995,7 @@ function App() {
               <input type="file" accept={EXCEL_ACCEPT} onChange={(event) => setSurveyFile(event.target.files?.[0] ?? null)} />
               <span>{surveyFile?.name ?? "필수 파일을 선택하세요"}</span>
             </label>
-            <label className="file-card">마트 연락처 엑셀
+            <label className="file-card">매장 연락처 엑셀
               <input type="file" accept={EXCEL_ACCEPT} onChange={(event) => setContactFile(event.target.files?.[0] ?? null)} />
               <span>{contactFile?.name ?? "연락처 파일이 있으면 함께 선택하세요"}</span>
             </label>
@@ -1009,12 +1047,17 @@ function App() {
       {view === "workspace" && currentRegion && (
         <main className="page">
           <div className="sticky-search workspace-search">
-            <SearchBox value={storeQuery} onChange={setStoreQuery} placeholder="마트명 / 주소 / 품목명 / 품목코드 / 바코드" />
-            <button className="tool-toggle" onClick={() => setWorkspaceToolsOpen((value) => !value)} aria-expanded={workspaceToolsOpen}>
+            <SearchBox value={storeQuery} onChange={setStoreQuery} placeholder={workspaceMode === "assignment" ? "매장명 / 주소 검색" : "매장명 / 주소 / 품목명 / 품목코드 / 바코드"} />
+            {workspaceMode === "list" && <button className="tool-toggle" onClick={() => setWorkspaceToolsOpen((value) => !value)} aria-expanded={workspaceToolsOpen}>
               <SlidersHorizontal size={18} /> 필터 {workspaceToolsOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-            </button>
+            </button>}
           </div>
-          {workspaceToolsOpen && (
+          <nav className="workspace-tabs" aria-label="매장 보기 방식">
+            <button type="button" className={workspaceMode === "list" ? "active" : ""} onClick={() => setWorkspaceMode("list")}>매장 리스트</button>
+            <button type="button" className={workspaceMode === "map" ? "active" : ""} onClick={() => setWorkspaceMode("map")}>매장 지도</button>
+            <button type="button" className={workspaceMode === "assignment" ? "active" : ""} onClick={() => setWorkspaceMode("assignment")}>담당매장 설정</button>
+          </nav>
+          {workspaceToolsOpen && workspaceMode === "list" && (
             <section className="tool-panel">
               <FilterBar filter={filter} setFilter={setFilter} />
               <label className="sort-control sort-only">
@@ -1034,11 +1077,11 @@ function App() {
                   순서 편집
                 </button>
               )}
-              <button className="map-view-button" type="button" onClick={() => setView("map")}><MapPin size={16} /> 지도 보기</button>
             </section>
           )}
+          {workspaceMode === "list" && (
           <div className="list">
-            {visibleRegionStores.map((store) => {
+            {assignedVisibleRegionStores.map((store) => {
               const ownItems = regionItemsByStore.get(store.id) ?? [];
               const baseStats = regionStatsByStore.get(store.id) ?? emptyStats;
               const ownStats = photosReady ? baseStats : { ...baseStats, photoMissing: 0 };
@@ -1053,7 +1096,7 @@ function App() {
                   dragging={dragStoreId === store.id}
                   onOpen={() => openStore(store)}
                   onContacts={() => setContactStoreId(store.id)}
-                  onMapToggle={async () => { await putStore({ ...store, mapIncluded: store.mapIncluded === false, updatedAt: now() }); await refresh(store.region); }}
+                  onAssignToggle={() => setStoreAssigned(store, store.mapIncluded === false)}
                   onOrderChange={(value) => saveVisitOrder(store, value)}
                   onMoveUp={() => moveVisitOrder(store, -1)}
                   onMoveDown={() => moveVisitOrder(store, 1)}
@@ -1065,22 +1108,32 @@ function App() {
               );
             })}
           </div>
+          )}
+          {workspaceMode === "map" && (
+            <StoreMapView
+              region={currentRegion}
+              stores={assignedRegionStores}
+              statsByStore={regionStatsByStore}
+              askConfirm={askConfirm}
+              onOpen={(store) => openStore(store)}
+              onToggle={(store) => setStoreAssigned(store, false)}
+              onCoordinateUpdate={async (store, patch) => {
+                const nextStore = { ...store, ...patch, geocodedAt: now(), updatedAt: now() };
+                await putStore(nextStore);
+                setStores((old) => old.map((candidate) => candidate.id === store.id ? nextStore : candidate));
+              }}
+            />
+          )}
+          {workspaceMode === "assignment" && (
+            <StoreAssignmentPanel
+              stores={assignmentVisibleStores}
+              totalStores={regionStores.length}
+              statsByStore={regionStatsByStore}
+              onAssign={setStoreAssigned}
+              onAssignAll={setStoresAssigned}
+            />
+          )}
         </main>
-      )}
-
-      {view === "map" && currentRegion && (
-        <StoreMapView
-          region={currentRegion}
-          stores={regionStores.filter((store) => store.mapIncluded !== false)}
-          statsByStore={regionStatsByStore}
-          onOpen={(store) => openStore(store)}
-          onToggle={async (store) => { await putStore({ ...store, mapIncluded: false, updatedAt: now() }); await refresh(store.region); }}
-          onCoordinateUpdate={async (store, patch) => {
-            const nextStore = { ...store, ...patch, geocodedAt: now(), updatedAt: now() };
-            await putStore(nextStore);
-            setStores((old) => old.map((candidate) => candidate.id === store.id ? nextStore : candidate));
-          }}
-        />
       )}
 
       {view === "store" && selectedStore && (
@@ -1088,7 +1141,7 @@ function App() {
           <section className="panel">
             <h1>{selectedStore.storeName}</h1>
             <div className="store-address"><span>주소</span><strong>{selectedStore.storeAddress || "-"}</strong></div>
-            <div className="store-address store-photo-heading"><span>마트 전경사진</span></div>
+            <div className="store-address store-photo-heading"><span>매장 전경사진</span></div>
             {(() => {
               const frontPhoto = photos.find((photo) => photo.id === selectedStore.frontPhotoId);
               return (
@@ -1105,7 +1158,7 @@ function App() {
           <section className="panel store-status-panel">
             <h2>상태</h2>
             <div className="store-operating">
-              <span>현재 마트 상태</span>
+              <span>현재 매장 상태</span>
               <strong className={`operating-badge ${selectedStore.frontPhotoId && selectedStore.operatingStatus ? operatingClass(selectedStore.operatingStatus) : "unknown"}`}>{storeDisplayStatus(selectedStore)}</strong>
             </div>
             <div className="store-state-actions">
@@ -1117,15 +1170,15 @@ function App() {
               </select>
               <button type="button" className="primary" disabled={!selectedStore.frontPhotoId} onClick={() => setStoreOperatingStatus(storeStatusDraft)}>저장</button>
             </div>
-            {!selectedStore.frontPhotoId && <p className="small-help warn">마트 전경사진을 먼저 등록해야 상태를 전환할 수 있습니다.</p>}
-            {selectedStore.frontPhotoId && !selectedStore.operatingStatus && <p className="small-help warn">조사 입력 전 마트 상태를 영업 중, 폐업, 임시휴업 중 하나로 설정해 주세요.</p>}
+            {!selectedStore.frontPhotoId && <p className="small-help warn">매장 전경사진을 먼저 등록해야 상태를 전환할 수 있습니다.</p>}
+            {selectedStore.frontPhotoId && !selectedStore.operatingStatus && <p className="small-help warn">조사 입력 전 매장 상태를 영업 중, 폐업, 임시휴업 중 하나로 설정해 주세요.</p>}
             {storeStatusMessage && <p className="ok store-status-message">{storeStatusMessage}</p>}
           </section>
           <Contacts items={storeItems} />
           <section className="panel">
             <p>조사 품목: {storeItems.length.toLocaleString()}건</p>
             <label className="store-date-row"><span>방문 조사일</span><input type="date" value={selectedStore.surveyDate} onChange={async (event) => { await putStore({ ...selectedStore, surveyDate: event.target.value, updatedAt: now() }); await refresh(selectedStore.region); }} /></label>
-            <button className="primary sticky-lite" onClick={() => selectedStore.frontPhotoId && selectedStore.operatingStatus ? (setItemQuery(""), setView("items")) : alert(selectedStore.frontPhotoId ? "마트 상태를 먼저 설정해 주세요." : "마트 전경사진을 먼저 촬영/선택해 주세요.")}>조사 입력</button>
+            <button className="primary sticky-lite" onClick={() => selectedStore.frontPhotoId && selectedStore.operatingStatus ? (setItemQuery(""), setView("items")) : alert(selectedStore.frontPhotoId ? "매장 상태를 먼저 설정해 주세요." : "매장 전경사진을 먼저 촬영/선택해 주세요.")}>조사 입력</button>
           </section>
         </main>
       )}
@@ -1365,7 +1418,7 @@ function RegionSummary({ stats, itemStats }: { stats: RegionStats; itemStats: Re
   return (
     <div className="region-summary">
       <div className="region-metric">
-        <span>마트</span>
+        <span>매장</span>
         <strong>{stats.completed.toLocaleString()}<small>/{stats.total.toLocaleString()}</small></strong>
         <div className="mini-progress"><i style={{ width: `${storePercent}%` }} /></div>
         <em>미조사 {stats.notStarted.toLocaleString()}</em>
@@ -1429,7 +1482,7 @@ function StoreCard({
   dragging,
   onOpen,
   onContacts,
-  onMapToggle,
+  onAssignToggle,
   onOrderChange,
   onMoveUp,
   onMoveDown,
@@ -1446,7 +1499,7 @@ function StoreCard({
   dragging: boolean;
   onOpen: () => void;
   onContacts: () => void;
-  onMapToggle: () => void;
+  onAssignToggle: () => void;
   onOrderChange: (value: string) => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
@@ -1485,14 +1538,14 @@ function StoreCard({
           <p>{store.storeAddress || "주소 없음"}</p>
         </div>
         <details className="card-menu">
-          <summary aria-label="마트 메뉴"><MoreVertical size={18} /></summary>
+          <summary aria-label="매장 메뉴"><MoreVertical size={18} /></summary>
           <div className="menu-popover">
-            <button type="button" onClick={onMapToggle}><MapPin size={15} />{store.mapIncluded === false ? "지도 대상 포함" : "지도 대상 제외"}</button>
+            <button type="button" onClick={onAssignToggle}><MapPin size={15} />{store.mapIncluded === false ? "담당매장 포함" : "담당매장 제외"}</button>
             {mapLinks(store.storeAddress).map(([name, href]) => <a key={name} href={href} target="_blank"><MapPin size={15} />{name} 지도</a>)}
           </div>
         </details>
       </div>
-      {store.mapIncluded === false && <span className="map-excluded-badge">지도 제외</span>}
+      {store.mapIncluded === false && <span className="map-excluded-badge">담당 제외</span>}
       <div className="store-progress">
         <div className="store-metric-row">
           <span>물품</span>
@@ -1512,7 +1565,7 @@ function StoreCard({
   );
 }
 
-function StoreMapView({ region, stores, statsByStore, onOpen, onToggle, onCoordinateUpdate }: { region: string; stores: SurveyStore[]; statsByStore: Map<string, RegionStats>; onOpen: (store: SurveyStore) => void; onToggle: (store: SurveyStore) => void | Promise<void>; onCoordinateUpdate: (store: SurveyStore, patch: Partial<SurveyStore>) => void | Promise<void> }) {
+function StoreMapView({ region, stores, statsByStore, askConfirm, onOpen, onToggle, onCoordinateUpdate }: { region: string; stores: SurveyStore[]; statsByStore: Map<string, RegionStats>; askConfirm: (options: ConfirmState) => Promise<boolean>; onOpen: (store: SurveyStore) => void; onToggle: (store: SurveyStore) => void | Promise<void>; onCoordinateUpdate: (store: SurveyStore, patch: Partial<SurveyStore>) => void | Promise<void> }) {
   const mapNode = useRef<HTMLDivElement | null>(null);
   const [activeStoreId, setActiveStoreId] = useState(stores.find(hasStoreCoordinates)?.id ?? "");
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -1592,12 +1645,22 @@ function StoreMapView({ region, stores, statsByStore, onOpen, onToggle, onCoordi
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
     );
   };
-  const geocodeMissingStores = async () => {
-    const targets = missingStores.filter((store) => store.storeAddress);
+  const geocodeStores = async (mode: "missing" | "all") => {
+    const targets = (mode === "all" ? stores : missingStores).filter((store) => store.storeAddress);
     if (!targets.length) {
-      setGeocodeMessage("좌표를 검색할 마트가 없습니다.");
+      setGeocodeMessage("좌표를 검색할 매장이 없습니다.");
       return;
     }
+    const estimatedSeconds = Math.max(1, targets.length);
+    const estimatedText = estimatedSeconds >= 60 ? `약 ${Math.ceil(estimatedSeconds / 60)}분` : `약 ${estimatedSeconds}초`;
+    const ok = await askConfirm({
+      title: "매장 위치 검색",
+      message: `담당매장 ${targets.length.toLocaleString()}개의 위치를 주소로 검색합니다.\n무료 주소검색 정책을 지키기 위해 1초에 1개씩 처리하므로 ${estimatedText} 정도 걸릴 수 있습니다.\n계속할까요?`,
+      confirmText: "시작",
+      cancelText: "취소",
+      plain: true,
+    });
+    if (!ok) return;
     setGeocoding(true);
     let success = 0;
     let failed = 0;
@@ -1628,14 +1691,15 @@ function StoreMapView({ region, stores, statsByStore, onOpen, onToggle, onCoordi
   };
 
   return (
-    <main className="page map-page">
+    <div className="map-page">
       <section className="map-summary">
         <div>
           <strong>{region}</strong>
-          <span>지도 대상 {stores.length.toLocaleString()}개 · 완료 {completedCount.toLocaleString()}개 · 미완료 {(stores.length - completedCount).toLocaleString()}개</span>
+          <span>담당매장 {stores.length.toLocaleString()}개 · 완료 {completedCount.toLocaleString()}개 · 미완료 {(stores.length - completedCount).toLocaleString()}개</span>
         </div>
         <div className="map-summary-actions">
-          <button type="button" onClick={geocodeMissingStores} disabled={geocoding || missingStores.length === 0}>{geocoding ? "검색 중" : "좌표 검색"}</button>
+          <button type="button" onClick={() => geocodeStores("missing")} disabled={geocoding || missingStores.length === 0}>{geocoding ? "검색 중" : "추가 위치"}</button>
+          <button type="button" onClick={() => geocodeStores("all")} disabled={geocoding || stores.length === 0}>전체 갱신</button>
           <button type="button" onClick={locateMe}>내 위치</button>
         </div>
       </section>
@@ -1651,17 +1715,17 @@ function StoreMapView({ region, stores, statsByStore, onOpen, onToggle, onCoordi
             <p>{activeStore.storeAddress || "주소 없음"}</p>
             <div className="map-active-actions">
               <button type="button" className="primary" onClick={() => onOpen(activeStore)}>입력</button>
-              <button type="button" onClick={() => onToggle(activeStore)}>지도 대상 제외</button>
+              <button type="button" onClick={() => onToggle(activeStore)}>담당매장 제외</button>
             </div>
           </>
         ) : (
-          <p className="muted">좌표가 있는 마트를 선택하면 여기에 정보가 표시됩니다.</p>
+          <p className="muted">좌표가 있는 매장을 선택하면 여기에 정보가 표시됩니다.</p>
         )}
       </section>
       {missingStores.length > 0 && (
         <section className="panel">
           <h2>좌표 없음 ({missingStores.length.toLocaleString()}개)</h2>
-          <p className="muted">엑셀에 위도/경도 컬럼을 추가하면 지도에 마커로 표시됩니다.</p>
+          <p className="muted">엑셀에 위도/경도 컬럼을 추가하거나 위치를 검색하면 지도에 마커로 표시됩니다.</p>
           <div className="map-missing-list">
             {missingStores.slice(0, 80).map((store) => (
               <button key={store.id} type="button" onClick={() => onOpen(store)}>
@@ -1672,7 +1736,42 @@ function StoreMapView({ region, stores, statsByStore, onOpen, onToggle, onCoordi
           </div>
         </section>
       )}
-    </main>
+    </div>
+  );
+}
+
+function StoreAssignmentPanel({ stores, totalStores, statsByStore, onAssign, onAssignAll }: { stores: SurveyStore[]; totalStores: number; statsByStore: Map<string, RegionStats>; onAssign: (store: SurveyStore, assigned: boolean) => void | Promise<void>; onAssignAll: (stores: SurveyStore[], assigned: boolean) => void | Promise<void> }) {
+  const assignedCount = stores.filter((store) => store.mapIncluded !== false).length;
+  return (
+    <section className="panel assignment-panel">
+      <div className="assignment-head">
+        <div>
+          <h2>담당매장 설정</h2>
+          <p>체크한 매장만 매장리스트와 매장지도에 표시됩니다.</p>
+        </div>
+        <strong>{assignedCount.toLocaleString()}<small>/{stores.length.toLocaleString()}</small></strong>
+      </div>
+      <div className="assignment-actions">
+        <button type="button" onClick={() => onAssignAll(stores, true)}>전체 선택</button>
+        <button type="button" onClick={() => onAssignAll(stores, false)}>전체 해제</button>
+        <span>지역 전체 {totalStores.toLocaleString()}개</span>
+      </div>
+      <div className="assignment-list">
+        {stores.map((store, index) => {
+          const stats = statsByStore.get(store.id) ?? emptyStats;
+          return (
+            <label key={store.id} className={`assignment-row ${store.mapIncluded !== false ? "selected" : ""}`}>
+              <input type="checkbox" checked={store.mapIncluded !== false} onChange={(event) => onAssign(store, event.target.checked)} />
+              <span className="assignment-order">{index + 1}</span>
+              <span className="assignment-name" title={store.storeName}>{store.storeName}</span>
+              <span className="assignment-address">{store.storeAddress || "주소 없음"}</span>
+              <span className="assignment-stat">{stats.completed.toLocaleString()}/{stats.total.toLocaleString()}</span>
+            </label>
+          );
+        })}
+        {!stores.length && <p className="muted">검색 결과가 없습니다.</p>}
+      </div>
+    </section>
   );
 }
 
@@ -1702,13 +1801,13 @@ function SummaryModal({ region, stats, storeCount, completedStoreCount, mode, on
         <div className="modal-head">
           <div>
             <h2>{region ?? "현재 지역"} 현황</h2>
-            <p>{mode === "regions" ? "지역 기준 완료 현황입니다." : mode === "workspace" ? "마트와 물품 기준 진행률입니다." : "물품 기준 진행률입니다."}</p>
+            <p>{mode === "regions" ? "지역 기준 완료 현황입니다." : mode === "workspace" ? "매장과 물품 기준 진행률입니다." : "물품 기준 진행률입니다."}</p>
           </div>
           <button className="icon-button" onClick={onClose} aria-label="닫기"><X size={18} /></button>
         </div>
         {(mode === "regions" || mode === "workspace") && (
           <div className="summary-progress-card">
-            <div><span>{mode === "regions" ? "지역" : "마트"}</span><strong>{completedStoreCount.toLocaleString()}<small>/{storeCount.toLocaleString()}</small></strong></div>
+            <div><span>{mode === "regions" ? "지역" : "매장"}</span><strong>{completedStoreCount.toLocaleString()}<small>/{storeCount.toLocaleString()}</small></strong></div>
             <div className="progress-line"><span style={{ width: `${regionPercent}%` }} /></div>
             <em>미완료 {(storeCount - completedStoreCount).toLocaleString()}</em>
           </div>
@@ -2003,7 +2102,7 @@ function ItemEditor({ item, storeItems, storeOperatingStatus, photos, onSave, on
   const storeSaveLocked = storeOperatingStatus !== "영업 중";
   const handleSave = async () => {
     if (storeSaveLocked) {
-      setSaveMessage("마트 상태가 영업 중일 때만 저장할 수 있습니다.");
+      setSaveMessage("매장 상태가 영업 중일 때만 저장할 수 있습니다.");
       return;
     }
     setIsSaving(true);
@@ -2025,7 +2124,7 @@ function ItemEditor({ item, storeItems, storeOperatingStatus, photos, onSave, on
         const nextId = nextTodoId();
         if (nextId) {
           if (await askConfirm({ title: "저장되었습니다", message: "다음 미등록 상품으로 이동할까요?", confirmText: "이동", cancelText: "현재 품목 보기" })) onMove(nextId);
-        } else if (await askConfirm({ title: "전 품목 입력완료", message: "마트리스트로 돌아갈까요?", confirmText: "예", cancelText: "아니오" })) {
+        } else if (await askConfirm({ title: "전 품목 입력완료", message: "매장리스트로 돌아갈까요?", confirmText: "예", cancelText: "아니오" })) {
           onStoreList();
         }
       } else {
@@ -2094,7 +2193,7 @@ function ItemEditor({ item, storeItems, storeOperatingStatus, photos, onSave, on
     <div className="item-action-fab">
       <div className="item-progress-mini"><span style={{ width: `${storeItems.length ? Math.round((storeItems.filter((candidate) => candidate.status === "완료").length + (draft.status === "완료" && !storeItems.find((candidate) => candidate.id === draft.id && candidate.status === "완료") ? 1 : 0)) / storeItems.length * 100) : 0}%` }} /></div>
       <button type="button" onClick={goListWithoutSave} disabled={isSaving}>목록</button>
-      <button type="button" className="primary" onClick={handleSave} disabled={isSaving || storeSaveLocked} aria-label="저장" title={storeSaveLocked ? "마트 상태가 영업 중일 때만 저장할 수 있습니다." : undefined}><CheckCircle2 size={19} />{isSaving ? "저장 중" : "저장"}</button>
+      <button type="button" className="primary" onClick={handleSave} disabled={isSaving || storeSaveLocked} aria-label="저장" title={storeSaveLocked ? "매장 상태가 영업 중일 때만 저장할 수 있습니다." : undefined}><CheckCircle2 size={19} />{isSaving ? "저장 중" : "저장"}</button>
       <button type="button" onClick={saveAndNext} disabled={isSaving}>다음</button>
     </div>
   </main>;
