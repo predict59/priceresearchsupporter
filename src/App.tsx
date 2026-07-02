@@ -1000,7 +1000,7 @@ function App() {
       )}
 
       {view === "item" && selectedItem && (
-        <ItemEditor item={selectedItem} storeItems={storeItems} photos={photos.filter((photo) => photo.storeId === selectedItem.storeId)} onSave={saveItem} onSaved={() => refresh(selectedItem.region)} onList={(focusId) => { if (focusId) setSelectedItemId(focusId); setView("items"); }} onStoreList={() => { setFilter("전체"); setSelectedStoreId(selectedItem.storeId); setView("workspace"); }} onMove={(id) => setSelectedItemId(id)} askConfirm={askConfirm} />
+        <ItemEditor item={selectedItem} storeItems={storeItems} storeOperatingStatus={stores.find((store) => store.id === selectedItem.storeId)?.operatingStatus ?? ""} photos={photos.filter((photo) => photo.storeId === selectedItem.storeId)} onSave={saveItem} onSaved={() => refresh(selectedItem.region)} onList={(focusId) => { if (focusId) setSelectedItemId(focusId); setView("items"); }} onStoreList={() => { setFilter("전체"); setSelectedStoreId(selectedItem.storeId); setView("workspace"); }} onMove={(id) => setSelectedItemId(id)} askConfirm={askConfirm} />
       )}
 
       {view === "validation" && (
@@ -1427,7 +1427,7 @@ function PhotoInput({ id, label, onFile }: { id?: string; label: string; onFile:
   );
 }
 
-function ItemEditor({ item, storeItems, photos, onSave, onSaved, onList, onStoreList, onMove, askConfirm }: { item: SurveyItem; storeItems: SurveyItem[]; photos: SurveyPhoto[]; onSave: (item: SurveyItem, photoOverride?: SurveyPhoto[]) => Promise<boolean>; onSaved: () => Promise<void>; onList: (focusId?: string) => void; onStoreList: () => void; onMove: (id: string) => void; askConfirm: (options: ConfirmState) => Promise<boolean> }) {
+function ItemEditor({ item, storeItems, storeOperatingStatus, photos, onSave, onSaved, onList, onStoreList, onMove, askConfirm }: { item: SurveyItem; storeItems: SurveyItem[]; storeOperatingStatus: StoreOperatingStatus | ""; photos: SurveyPhoto[]; onSave: (item: SurveyItem, photoOverride?: SurveyPhoto[]) => Promise<boolean>; onSaved: () => Promise<void>; onList: (focusId?: string) => void; onStoreList: () => void; onMove: (id: string) => void; askConfirm: (options: ConfirmState) => Promise<boolean> }) {
   const [draft, setDraft] = useState(item);
   const [localPhotos, setLocalPhotos] = useState<SurveyPhoto[]>(photos);
   const [deletedPhotoIds, setDeletedPhotoIds] = useState<string[]>([]);
@@ -1630,10 +1630,10 @@ function ItemEditor({ item, storeItems, photos, onSave, onSaved, onList, onStore
         return { type: diff < 0 || percent >= PRICE_DIFF_WARN_PERCENT ? "warn" : "ok", messages };
       })()
     : undefined;
-  const storeClosedLocked = draft.memo.includes("판매처 폐점") || draft.memo.includes("임시휴업");
+  const storeSaveLocked = storeOperatingStatus !== "영업 중";
   const handleSave = async () => {
-    if (storeClosedLocked) {
-      setSaveMessage("마트 상태 처리 품목은 개별 저장할 수 없습니다.");
+    if (storeSaveLocked) {
+      setSaveMessage("마트 상태가 영업 중일 때만 저장할 수 있습니다.");
       return;
     }
     setIsSaving(true);
@@ -1723,7 +1723,7 @@ function ItemEditor({ item, storeItems, photos, onSave, onSaved, onList, onStore
     <div className="item-action-fab">
       <div className="item-progress-mini"><span style={{ width: `${storeItems.length ? Math.round((storeItems.filter((candidate) => candidate.status === "완료").length + (draft.status === "완료" && !storeItems.find((candidate) => candidate.id === draft.id && candidate.status === "완료") ? 1 : 0)) / storeItems.length * 100) : 0}%` }} /></div>
       <button type="button" onClick={goListWithoutSave} disabled={isSaving}>목록</button>
-      <button type="button" className="primary" onClick={handleSave} disabled={isSaving || storeClosedLocked} aria-label="저장" title={storeClosedLocked ? "폐점/임시휴업 처리 품목은 개별 저장할 수 없습니다." : undefined}><CheckCircle2 size={19} />{isSaving ? "저장 중" : "저장"}</button>
+      <button type="button" className="primary" onClick={handleSave} disabled={isSaving || storeSaveLocked} aria-label="저장" title={storeSaveLocked ? "마트 상태가 영업 중일 때만 저장할 수 있습니다." : undefined}><CheckCircle2 size={19} />{isSaving ? "저장 중" : "저장"}</button>
       <button type="button" onClick={saveAndNext} disabled={isSaving}>다음</button>
     </div>
   </main>;
