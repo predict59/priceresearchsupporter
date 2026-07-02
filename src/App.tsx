@@ -44,6 +44,8 @@ const appendMemoText = (memo: string, text: string) => {
 };
 const removeMemoTexts = (memo: string, texts: string[]) =>
   memo.split("/").map((part) => part.trim()).filter((part) => part && !texts.includes(part)).join(" / ");
+const STORE_STATUS_MEMOS = ["판매처 폐점", "임시휴업"];
+const POS_MEMOS = ["POS 조회", "POS 조회 불가", "POS 확인"];
 const periodTypeFromDates = (start: string, end: string) => {
   if (!start || !end) return "";
   const startTime = new Date(`${start}T00:00:00`).getTime();
@@ -588,7 +590,7 @@ function App() {
       abnormalStatus: "미판매" as const,
       posChecked: "조회불가" as const,
       abnormalDisplay: "" as const,
-      memo: appendMemoText(item.memo, memoText),
+      memo: appendMemoText(removeMemoTexts(item.memo, STORE_STATUS_MEMOS), memoText),
       status: "완료" as const,
       updatedAt: now(),
     }));
@@ -1390,8 +1392,8 @@ function Contacts({ items }: { items: SurveyItem[] }) {
         return (
           <div className="contact" key={`${item.companyManager}-${item.companyTel}-${item.martTel}`}>
             <dl className="contact-info">
-              <dt>담당자명</dt><dd>{item.companyManager || "확인 필요"}</dd>
-              <dt>담당자 연락처</dt><dd>{item.companyTel ? <a href={`tel:${item.companyTel.replace(/[^\d+]/g, "")}`}><Phone size={15} />{item.companyTel}</a> : <span className="warn">확인 필요</span>}</dd>
+              <dt>이름</dt><dd>{item.companyManager || "확인 필요"}</dd>
+              <dt>연락처</dt><dd>{item.companyTel ? <a href={`tel:${item.companyTel.replace(/[^\d+]/g, "")}`}><Phone size={15} />{item.companyTel}</a> : <span className="warn">확인 필요</span>}</dd>
             </dl>
           </div>
         );
@@ -1406,7 +1408,7 @@ function ItemContact({ item }: { item: SurveyItem }) {
     <section className={`item-contact ${hasAnyContact && item.companyTel ? "" : "needs-check"}`}>
       <div>
         <h2>담당자 정보</h2>
-        <span>담당자명: {item.companyManager || "확인 필요"}</span>
+        <span>이름: {item.companyManager || "확인 필요"}</span>
         <span>연락처: {item.companyTel ? <a href={`tel:${item.companyTel.replace(/[^\d+]/g, "")}`}>{item.companyTel}</a> : "확인 필요"}</span>
       </div>
     </section>
@@ -1553,13 +1555,16 @@ function ItemEditor({ item, storeItems, storeOperatingStatus, photos, onSave, on
       posChecked: nextValue === "O" ? "" : draft.posChecked,
       posPrice: null,
       abnormalDisplay: nextValue === "X" ? "" : draft.abnormalDisplay,
+      memo: nextValue === "O" ? removeMemoTexts(draft.memo, POS_MEMOS) : draft.memo,
     });
   };
   const cleanDiscountMemo = () => removeMemoTexts(draft.memo, ["상시할인", "할인 정보 확인 불가"]);
   const updatePosChecked = (value: string) => {
+    const cleanMemo = removeMemoTexts(draft.memo, POS_MEMOS);
+    const memo = value === "조회함" ? appendMemoText(cleanMemo, "POS 조회") : value === "조회불가" ? appendMemoText(cleanMemo, "POS 조회 불가") : cleanMemo;
     update({
       posChecked: value as SurveyItem["posChecked"],
-      memo: value === "조회함" ? appendMemo("POS 확인") : draft.memo,
+      memo,
     });
   };
   const updateDiscountEnabled = (value: string) => {
@@ -1625,9 +1630,9 @@ function ItemEditor({ item, storeItems, storeOperatingStatus, photos, onSave, on
     ? (() => {
         const diff = draft.normalPrice - draft.basePrice!;
         const percent = draft.basePrice ? Math.round((Math.abs(diff) / draft.basePrice) * 100) : 0;
-        const messages = [diff < 0 ? "조사가격이 기준가격보다 작습니다." : diff > 0 ? "조사가격이 기준가격보다 큽니다." : "조사가격이 기준가격과 같습니다."];
-        if (percent >= PRICE_DIFF_WARN_PERCENT) messages.push(`기준가격과 ${percent}% 차이납니다.`);
-        return { type: diff < 0 || percent >= PRICE_DIFF_WARN_PERCENT ? "warn" : "ok", messages };
+        const messages = [{ type: diff < 0 ? "warn" : "ok", text: diff < 0 ? "조사가격이 기준가격보다 작습니다." : diff > 0 ? "조사가격이 기준가격보다 큽니다." : "조사가격이 기준가격과 같습니다." }];
+        if (percent >= PRICE_DIFF_WARN_PERCENT) messages.push({ type: "warn", text: `기준가격과 ${percent}% 차이납니다.` });
+        return { messages };
       })()
     : undefined;
   const storeSaveLocked = storeOperatingStatus !== "영업 중";
@@ -1697,7 +1702,7 @@ function ItemEditor({ item, storeItems, storeOperatingStatus, photos, onSave, on
       <p className="price-base">기준가격: <strong>{draft.basePrice?.toLocaleString() ?? "-"}원</strong></p>
       {priceBlocked && <p className="small-help warn">바코드 미등록 미판매 상품은 가격 입력을 생략합니다.</p>}
       <Money label="정상가" disabled={priceBlocked} value={draft.normalPrice} onChange={(value) => { const normalPrice = num(value); update({ normalPrice, discountPrice: draft.memo.includes("1+1 행사") && normalPrice !== null ? Math.round(normalPrice / 2) : draft.discountPrice }); }} />
-      {priceFeedback && <div className={`price-feedback ${priceFeedback.type}`}>{priceFeedback.messages.map((message) => <span key={message}><i aria-hidden="true">{priceFeedback.type === "warn" ? "!" : "✓"}</i>{message}</span>)}</div>}
+      {priceFeedback && <div className="price-feedback">{priceFeedback.messages.map((message) => <span className={message.type} key={message.text}><i aria-hidden="true">{message.type === "warn" ? "!" : "✓"}</i>{message.text}</span>)}</div>}
       <Choice label="할인 여부" disabled={priceBlocked} value={draft.hasDiscount === null ? "" : draft.hasDiscount ? "할인 있음" : "할인 없음"} values={["할인 없음", "할인 있음"]} onChange={updateDiscountEnabled} />
       <div className={draft.hasDiscount === false || priceBlocked ? "disabled-block" : ""}>
         <div className="field-row">

@@ -1272,19 +1272,19 @@ textarea { min-height: 110px; resize: vertical; }
 }
 .price-feedback {
   margin: -4px 0 12px 130px;
-  border-radius: 8px;
-  padding: 9px 10px;
   font-size: 13px;
   font-weight: 900;
   line-height: 1.35;
   display: grid;
-  gap: 3px;
+  gap: 5px;
 }
 .price-feedback span {
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr);
   gap: 6px;
   align-items: start;
+  border-radius: 8px;
+  padding: 9px 10px;
 }
 .price-feedback i {
   width: 18px;
@@ -1297,11 +1297,11 @@ textarea { min-height: 110px; resize: vertical; }
   font-weight: 1000;
   line-height: 1;
 }
-.price-feedback.warn i {
+.price-feedback span.warn i {
   background: #fed7aa;
   color: #9a3412;
 }
-.price-feedback.ok i {
+.price-feedback span.ok i {
   background: #a7f3d0;
   color: #065f46;
 }
@@ -1322,12 +1322,12 @@ textarea { min-height: 110px; resize: vertical; }
   font-size: 16px;
   font-weight: 800;
 }
-.price-feedback.warn {
+.price-feedback span.warn {
   background: #fff7ed;
   color: #c2410c;
   border: 1px solid #fed7aa;
 }
-.price-feedback.ok {
+.price-feedback span.ok {
   background: #ecfdf5;
   color: #047857;
   border: 1px solid #a7f3d0;
