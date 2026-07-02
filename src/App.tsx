@@ -379,7 +379,6 @@ function App() {
   const [storageOpen, setStorageOpen] = useState(false);
   const [storageEstimate, setStorageEstimate] = useState<StorageEstimate | undefined>();
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [locationMessage, setLocationMessage] = useState("");
   const [geocodeMessage, setGeocodeMessage] = useState("");
   const [geocoding, setGeocoding] = useState(false);
   const [photosReady, setPhotosReady] = useState(false);
@@ -387,7 +386,7 @@ function App() {
   const [storeStatusDraft, setStoreStatusDraft] = useState<StoreOperatingStatus | "">("");
   const [storeStatusMessage, setStoreStatusMessage] = useState("");
   const confirmResolver = useRef<((value: boolean) => void) | null>(null);
-  const locatingRef = useRef(false);
+  const locatePromiseRef = useRef<Promise<{ latitude: number; longitude: number } | null> | null>(null);
   const initialLocationRequested = useRef(false);
 
   const currentRegion = settings.currentRegion;
@@ -502,34 +501,29 @@ function App() {
   }
 
   function locateUser() {
-    return new Promise<{ latitude: number; longitude: number } | null>((resolve) => {
-      if (locatingRef.current) {
-        resolve(userLocation);
-        return;
-      }
+    if (locatePromiseRef.current) return locatePromiseRef.current;
+    const request = new Promise<{ latitude: number; longitude: number } | null>((resolve) => {
       if (!navigator.geolocation) {
-        setLocationMessage("");
+        locatePromiseRef.current = null;
         resolve(null);
         return;
       }
-      locatingRef.current = true;
-      setLocationMessage("");
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const next = { latitude: position.coords.latitude, longitude: position.coords.longitude };
           setUserLocation(next);
-          setLocationMessage("");
-          locatingRef.current = false;
+          locatePromiseRef.current = null;
           resolve(next);
         },
         () => {
-          setLocationMessage("");
-          locatingRef.current = false;
+          locatePromiseRef.current = null;
           resolve(null);
         },
         { enableHighAccuracy: false, timeout: 3000, maximumAge: 300000 },
       );
     });
+    locatePromiseRef.current = request;
+    return request;
   }
 
   async function geocodeStores(targetStores: SurveyStore[], modeLabel: string) {
@@ -1239,8 +1233,6 @@ function App() {
             statsByStore={regionStatsByStore}
             geocoding={geocoding}
             geocodeMessage={geocodeMessage}
-            locationMessage={locationMessage}
-            onLocate={locateUser}
             onGeocodeMissing={() => geocodeStores(regionStores.filter((store) => store.mapIncluded === true && !hasStoreCoordinates(store)), "위치정보가 없는 담당매장")}
             onGeocodeAll={() => geocodeStores(regionStores.filter((store) => store.mapIncluded === true), "담당매장")}
             onAssign={setStoreAssigned}
@@ -1832,7 +1824,7 @@ function StoreMapView({ stores, statsByStore, userLocation, selectedStoreId, onO
   );
 }
 
-function StoreAssignmentPanel({ stores, totalStores, statsByStore, geocoding, geocodeMessage, locationMessage, onLocate, onGeocodeMissing, onGeocodeAll, onAssign, onAssignAll, onSave }: { stores: SurveyStore[]; totalStores: number; statsByStore: Map<string, RegionStats>; geocoding: boolean; geocodeMessage: string; locationMessage: string; onLocate: () => Promise<{ latitude: number; longitude: number } | null>; onGeocodeMissing: () => void | Promise<void>; onGeocodeAll: () => void | Promise<void>; onAssign: (store: SurveyStore, assigned: boolean) => void | Promise<void>; onAssignAll: (stores: SurveyStore[], assigned: boolean) => void | Promise<void>; onSave: () => void | Promise<void> }) {
+function StoreAssignmentPanel({ stores, totalStores, statsByStore, geocoding, geocodeMessage, onGeocodeMissing, onGeocodeAll, onAssign, onAssignAll, onSave }: { stores: SurveyStore[]; totalStores: number; statsByStore: Map<string, RegionStats>; geocoding: boolean; geocodeMessage: string; onGeocodeMissing: () => void | Promise<void>; onGeocodeAll: () => void | Promise<void>; onAssign: (store: SurveyStore, assigned: boolean) => void | Promise<void>; onAssignAll: (stores: SurveyStore[], assigned: boolean) => void | Promise<void>; onSave: () => void | Promise<void> }) {
   const assignedCount = stores.filter((store) => store.mapIncluded === true).length;
   const missingCoordinateCount = stores.filter((store) => store.mapIncluded === true && !hasStoreCoordinates(store)).length;
   return (
@@ -1844,19 +1836,28 @@ function StoreAssignmentPanel({ stores, totalStores, statsByStore, geocoding, ge
         </div>
         <strong>{assignedCount.toLocaleString()}<small>/{stores.length.toLocaleString()}</small></strong>
       </div>
-      <div className="assignment-actions">
-        <button type="button" onClick={() => onAssignAll(stores, true)}>전체 선택</button>
-        <button type="button" onClick={() => onAssignAll(stores, false)}>전체 해제</button>
-        <span>지역 전체 {totalStores.toLocaleString()}개</span>
+      <div className="assignment-section">
+        <div className="assignment-section-head">
+          <strong>매장 위치정보</strong>
+          <span>위치 없는 담당매장 {missingCoordinateCount.toLocaleString()}개</span>
+        </div>
+        <div className="assignment-location-actions">
+          <button type="button" onClick={onGeocodeMissing} disabled={geocoding || missingCoordinateCount === 0}>{geocoding ? "검색 중" : "누락 위치만 가져오기"}</button>
+          <button type="button" onClick={onGeocodeAll} disabled={geocoding || assignedCount === 0}>담당매장 위치 갱신</button>
+        </div>
       </div>
-      <div className="assignment-location-actions">
-        <button type="button" onClick={onLocate}>내 위치 확인</button>
-        <button type="button" onClick={onGeocodeMissing} disabled={geocoding || missingCoordinateCount === 0}>{geocoding ? "검색 중" : "없는 위치만 가져오기"}</button>
-        <button type="button" onClick={onGeocodeAll} disabled={geocoding || assignedCount === 0}>전체 위치 다시 가져오기</button>
-      </div>
-      {locationMessage && <p className="map-location-message">{locationMessage}</p>}
       {geocodeMessage && <p className="map-location-message">{geocodeMessage}</p>}
       {missingCoordinateCount > 0 && <p className="small-help warn">위치정보 없는 담당매장 {missingCoordinateCount.toLocaleString()}개</p>}
+      <div className="assignment-list-head">
+        <div>
+          <strong>매장 선택</strong>
+          <span>지역 전체 {totalStores.toLocaleString()}개</span>
+        </div>
+        <div className="assignment-actions">
+          <button type="button" onClick={() => onAssignAll(stores, true)}>전체 선택</button>
+          <button type="button" onClick={() => onAssignAll(stores, false)}>전체 해제</button>
+        </div>
+      </div>
       <div className="assignment-list">
         {stores.map((store, index) => {
           const stats = statsByStore.get(store.id) ?? emptyStats;

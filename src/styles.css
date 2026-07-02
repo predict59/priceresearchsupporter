@@ -1777,7 +1777,7 @@ textarea { min-height: 110px; resize: vertical; }
 }
 .assignment-panel {
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 .assignment-head {
   display: grid;
@@ -1800,16 +1800,43 @@ textarea { min-height: 110px; resize: vertical; }
   font-size: 14px;
   color: #64748b;
 }
-.assignment-actions {
+.assignment-section {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #dbe1e5;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+.assignment-section-head,
+.assignment-list-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   align-items: center;
 }
+.assignment-section-head strong,
+.assignment-list-head strong {
+  display: block;
+  color: #17202a;
+  font-size: 14px;
+  font-weight: 900;
+}
+.assignment-section-head span,
+.assignment-list-head span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
 .assignment-location-actions {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 7px;
+}
+.assignment-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
 }
 .assignment-location-actions button,
 .assignment-actions button {
@@ -1817,12 +1844,6 @@ textarea { min-height: 110px; resize: vertical; }
   padding: 0 8px;
   font-size: 13px;
   font-weight: 900;
-}
-.assignment-actions span {
-  color: #64748b;
-  font-size: 13px;
-  font-weight: 800;
-  white-space: nowrap;
 }
 .assignment-list {
   display: grid;
@@ -2168,8 +2189,16 @@ textarea { min-height: 110px; resize: vertical; }
   .map-active-panel {
     padding: 12px;
   }
-  .assignment-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .assignment-actions span { grid-column: 1 / -1; }
+  .assignment-list-head {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+  .assignment-actions {
+    justify-content: stretch;
+  }
+  .assignment-actions button {
+    flex: 1;
+  }
   .assignment-row {
     grid-template-columns: 24px 28px minmax(0, 1fr) auto;
   }
